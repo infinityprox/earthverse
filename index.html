@@ -102,7 +102,7 @@ function addVehicle(x,z,color){
 for(let i=0;i<8;i++)addVehicle(-25+i*7,14+(i%2)*3,[0x39a9a5,0x8295a5,0xc4a35a,0x697a9b][i%4]);
 
 document.querySelector('#loadText').textContent='Loading player and citizens…';
-const humans=await createEarthverseHumans({THREE,scene,camera,renderer,maleModelUrl:'./assets/citizens/models/Superhero_Male_FullBody.gltf',femaleModelUrl:'./assets/citizens/models/Superhero_Female_FullBody.gltf',npcCount:50});
+const humans = await createEarthverseHumans({THREE,scene,camera,renderer,map: mapGLTF.scene,npcCount: 50,characterHeight: 1.7,spawnRadius: 65});
 const civilization=createCivilization({citizens:humans.npcs,worldName:'EARTHVERSE',citizenCount:humans.npcs.length});
 document.querySelector('#loading').style.display='none';
 
