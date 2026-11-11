@@ -4,25 +4,19 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { clone as cloneSkeleton } from 'three/addons/utils/SkeletonUtils.js';
 
 /*
-  EARTHVERSE HUMAN SYSTEM
+ EARTHVERSE HUMAN SYSTEM
+ Player: 1 Male
+ NPCs: 25 Male + 25 Female
 
-  Player: 1 Male
-  NPCs: 50 (25 Male + 25 Female)
+ Usage:
+ const humans = await createEarthverseHumans({
+   THREE, scene, camera, renderer,
+   npcCount: 50,
+   map: mapGLTF.scene
+ });
 
-  Male model:
-  ./assets/citizens/models/Superhero_Male_FullBody.gltf
-
-  Female model:
-  ./assets/citizens/models/Superhero_Female_FullBody.gltf
-
-  Usage:
-  const humans = await createEarthverseHumans({
-    THREE, scene, camera, renderer,
-    npcCount: 50
-  });
-
-  Animation loop:
-  humans.update(deltaSeconds);
+ Animation:
+ humans.update(deltaSeconds);
 */
 
 export async function createEarthverseHumans({
@@ -30,31 +24,34 @@ export async function createEarthverseHumans({
   scene,
   camera,
   renderer,
+  map = null,
   maleModelUrl = './assets/citizens/models/Superhero_Male_FullBody.gltf',
   femaleModelUrl = './assets/citizens/models/Superhero_Female_FullBody.gltf',
-  npcCount = 50
+  npcCount = 50,
+  characterHeight = 1.7,
+  spawnRadius = 65,
+  mapMargin = 8
 }) {
   if (!scene || !camera || !renderer) {
-    throw new Error('Earthverse requires scene, camera and renderer.');
+    throw new Error('Missing scene, camera or renderer.');
   }
 
   const loader = new GLTFLoader();
 
-  // Load both character models.
   const [maleGLTF, femaleGLTF] = await Promise.all([
     loader.loadAsync(maleModelUrl),
     loader.loadAsync(femaleModelUrl)
   ]);
 
-  // Prepare source models.
   function prepareModel(source) {
+    source.updateMatrixWorld(true);
+
     const bounds = new T.Box3().setFromObject(source);
-    const size = bounds.getSize(new T.Vector3());
-    const height = Math.max(size.y, 0.001);
+    const height = Math.max(bounds.max.y - bounds.min.y, 0.001);
 
     return {
       source,
-      scale: 1.72 / height
+      scale: characterHeight / height
     };
   }
 
@@ -63,31 +60,64 @@ export async function createEarthverseHumans({
     female: prepareModel(femaleGLTF.scene)
   };
 
-  // Identify common humanoid bones.
-  function findRig(model) {
-    const rig = {};
+  const world = new T.Group();
+  world.name = 'EARTHVERSE_HUMAN_SYSTEM';
+  scene.add(world);
 
+  // Get actual map bounds if supplied.
+  let mapBounds = null;
+
+  if (map) {
+    map.updateMatrixWorld(true);
+    mapBounds = new T.Box3().setFromObject(map);
+  }
+
+  const mapCenter = mapBounds
+    ? mapBounds.getCenter(new T.Vector3())
+    : new T.Vector3(0, 0, 0);
+
+  const halfX = mapBounds
+    ? Math.max(5, (mapBounds.max.x - mapBounds.min.x) * 0.42)
+    : spawnRadius;
+
+  const halfZ = mapBounds
+    ? Math.max(5, (mapBounds.max.z - mapBounds.min.z) * 0.42)
+    : spawnRadius;
+
+  function randomPosition(index, total, radius = 0) {
+    const angle = index * 2.399963229728653 +
+      Math.random() * 0.35;
+
+    const distance = radius || Math.sqrt(Math.random()) * 0.85;
+
+    const x = Math.cos(angle) * distance * halfX;
+    const z = Math.sin(angle) * distance * halfZ;
+
+    return new T.Vector3(
+      mapCenter.x + x,
+      0,
+      mapCenter.z + z
+    );
+  }
+
+  function findRig(model) {
     const patterns = {
-      hips: /hips|pelvis/i,
-      spine: /spine/i,
-      chest: /chest|upper.?body/i,
-      leftUpperArm: /left.*upper.?arm|upper.?arm.*left|upperarm_l/i,
-      rightUpperArm: /right.*upper.?arm|upper.?arm.*right|upperarm_r/i,
-      leftLowerArm: /left.*forearm|forearm.*left|lowerarm_l/i,
-      rightLowerArm: /right.*forearm|forearm.*right|lowerarm_r/i,
-      leftUpperLeg: /left.*upper.?leg|upper.?leg.*left|thigh_l/i,
-      rightUpperLeg: /right.*upper.?leg|upper.?leg.*right|thigh_r/i,
-      leftLowerLeg: /left.*lower.?leg|lower.?leg.*left|calf_l/i,
-      rightLowerLeg: /right.*lower.?leg|lower.?leg.*right|calf_r/i
+      leftUpperLeg: /left.*upper.?leg|thigh_l|upperleg_l/i,
+      rightUpperLeg: /right.*upper.?leg|thigh_r|upperleg_r/i,
+      leftLowerLeg: /left.*lower.?leg|calf_l/i,
+      rightLowerLeg: /right.*lower.?leg|calf_r/i,
+      leftUpperArm: /left.*upper.?arm|upperarm_l/i,
+      rightUpperArm: /right.*upper.?arm|upperarm_r/i,
+      spine: /spine/i
     };
+
+    const rig = {};
 
     model.traverse(object => {
       if (!object.isBone) return;
 
-      const name = object.name.replace(/[\s.-]/g, '_');
-
-      for (const [key, pattern] of Object.entries(patterns)) {
-        if (!rig[key] && pattern.test(name)) {
+      for (const key in patterns) {
+        if (!rig[key] && patterns[key].test(object.name)) {
           rig[key] = object;
         }
       }
@@ -96,96 +126,75 @@ export async function createEarthverseHumans({
     return rig;
   }
 
-  // Store original bone rotations.
   function createCharacter(gender) {
     const data = models[gender];
     const model = cloneSkeleton(data.source);
 
     model.scale.setScalar(data.scale);
-
-    model.traverse(object => {
-      if (object.isMesh) {
-        object.castShadow = true;
-        object.receiveShadow = true;
-        object.frustumCulled = true;
-      }
-    });
-
     model.updateMatrixWorld(true);
 
     const bounds = new T.Box3().setFromObject(model);
     model.position.y -= bounds.min.y;
 
-    const rig = findRig(model);
-    const baseRotations = {};
+    model.traverse(object => {
+      if (object.isMesh) {
+        object.castShadow = true;
+        object.receiveShadow = true;
+      }
+    });
 
-    for (const [key, bone] of Object.entries(rig)) {
-      baseRotations[key] = {
-        x: bone.rotation.x,
-        y: bone.rotation.y,
-        z: bone.rotation.z
-      };
+    const rig = findRig(model);
+    const base = {};
+
+    for (const key in rig) {
+      base[key] = rig[key].rotation.clone();
     }
 
     return {
       model,
       rig,
-      baseRotations,
+      base,
       gender,
       phase: Math.random() * Math.PI * 2
     };
   }
 
-  // Animate legs and arms procedurally.
   function animateCharacter(character, time, walking) {
-    const { rig, baseRotations, phase } = character;
-    const amount = walking ? 0.65 : 0;
-    const swing = Math.sin(time * 8 + phase) * amount;
+    const swing = walking
+      ? Math.sin(time * 7 + character.phase) * 0.48
+      : 0;
 
-    function rotate(key, x, y = 0, z = 0) {
-      const bone = rig[key];
-      const base = baseRotations[key];
+    const { rig, base } = character;
 
-      if (!bone || !base) return;
-
-      bone.rotation.x = base.x + x;
-      bone.rotation.y = base.y + y;
-      bone.rotation.z = base.z + z;
+    function rotate(key, amount) {
+      if (!rig[key] || !base[key]) return;
+      rig[key].rotation.x = base[key].x + amount;
     }
 
-    // Opposite arm and leg movement.
     rotate('leftUpperLeg', swing);
     rotate('rightUpperLeg', -swing);
 
-    rotate('leftLowerLeg', Math.max(0, -swing) * 0.7);
-    rotate('rightLowerLeg', Math.max(0, swing) * 0.7);
+    rotate('leftLowerLeg', Math.max(0, -swing) * 0.6);
+    rotate('rightLowerLeg', Math.max(0, swing) * 0.6);
 
-    rotate('leftUpperArm', -swing * 0.75);
-    rotate('rightUpperArm', swing * 0.75);
+    rotate('leftUpperArm', -swing * 0.7);
+    rotate('rightUpperArm', swing * 0.7);
 
-    rotate('leftLowerArm', 0);
-    rotate('rightLowerArm', 0);
-
-    rotate('spine', 0, 0, walking ? Math.sin(time * 8 + phase) * 0.025 : 0);
-    rotate('chest', 0, 0, 0);
+    rotate('spine', walking ? Math.sin(time * 7) * 0.02 : 0);
   }
 
-  // Main human world.
-  const world = new T.Group();
-  world.name = 'EARTHVERSE_HUMAN_SYSTEM';
-  scene.add(world);
-
-  // Player character.
+  // Player.
   const player = new T.Group();
   player.name = 'EARTHVERSE_PLAYER';
 
   const playerCharacter = createCharacter('male');
   player.add(playerCharacter.model);
+
+  const playerSpawn = randomPosition(0, 1, 0.12);
+  player.position.copy(playerSpawn);
   world.add(player);
 
-  player.position.set(0, 0, 4);
-
-  // NPC citizens.
+  // NPCs.
   const npcs = [];
   const npcData = [];
 
@@ -195,108 +204,79 @@ export async function createEarthverseHumans({
     const gender = i % 2 === 0 ? 'male' : 'female';
 
     const root = new T.Group();
-    root.name = `EARTHVERSE_AI_CITIZEN_${i + 1}`;
+    root.name = `EARTHVERSE_NPC_${i + 1}`;
 
     const character = createCharacter(gender);
     root.add(character.model);
 
-    const column = i % 10;
-    const row = Math.floor(i / 10);
+    // Golden-angle distribution avoids one crowded spawn point.
+    const position = randomPosition(i + 1, totalNPCs);
 
-    root.position.set(
-      (column - 4.5) * 3.2,
-      0,
-      -8 - row * 5
-    );
+    root.position.copy(position);
+    root.rotation.y = Math.random() * Math.PI * 2;
 
     world.add(root);
 
-    const npc = {
+    npcData.push({
       root,
       character,
-      gender,
-      home: root.position.clone(),
+      home: position.clone(),
       angle: Math.random() * Math.PI * 2,
-      speed: 0.45 + Math.random() * 0.35,
-      changeIn: 1 + Math.random() * 3,
-      walking: true,
+      speed: 0.35 + Math.random() * 0.45,
+      timer: Math.random() * 3,
       phase: Math.random() * Math.PI * 2
-    };
+    });
 
     npcs.push(root);
-    npcData.push(npc);
   }
 
-  // Mobile joystick interface.
+  // Player controls.
   const ui = document.createElement('div');
   ui.id = 'earthverse-human-controls';
 
   ui.innerHTML = `
-    <style>
-      #earthverse-human-controls {
-        position: fixed;
-        inset: 0;
-        z-index: 30;
-        pointer-events: none;
-        font-family: system-ui, sans-serif;
-      }
-
-      #ev-stick {
-        position: absolute;
-        left: 22px;
-        bottom: 26px;
-        width: 116px;
-        height: 116px;
-        border-radius: 50%;
-        background: #07152288;
-        border: 2px solid #ffffff66;
-        pointer-events: auto;
-        touch-action: none;
-      }
-
-      #ev-knob {
-        position: absolute;
-        left: 34px;
-        top: 34px;
-        width: 44px;
-        height: 44px;
-        border-radius: 50%;
-        background: #dceeffdd;
-        border: 2px solid white;
-        box-shadow: 0 2px 12px #0008;
-      }
-
-      #ev-hint {
-        position: absolute;
-        left: 22px;
-        bottom: 148px;
-        color: white;
-        background: #07152299;
-        padding: 5px 9px;
-        border-radius: 8px;
-        font-size: 11px;
-      }
-
-      @media(min-width:900px) {
-        #ev-stick {
-          width: 130px;
-          height: 130px;
-        }
-
-        #ev-knob {
-          left: 39px;
-          top: 39px;
-        }
-      }
-    </style>
-
-    <div id="ev-hint">
-      MOVE · WASD / JOYSTICK · DRAG TO LOOK
-    </div>
-
-    <div id="ev-stick">
-      <div id="ev-knob"></div>
-    </div>
+  <style>
+    #earthverse-human-controls {
+      position:fixed;
+      inset:0;
+      z-index:30;
+      pointer-events:none;
+    }
+    #ev-stick {
+      position:absolute;
+      left:22px;
+      bottom:26px;
+      width:116px;
+      height:116px;
+      border-radius:50%;
+      background:#07152299;
+      border:2px solid #ffffff88;
+      pointer-events:auto;
+      touch-action:none;
+    }
+    #ev-knob {
+      position:absolute;
+      width:44px;
+      height:44px;
+      left:34px;
+      top:34px;
+      border-radius:50%;
+      background:#e8f4ff;
+      border:2px solid white;
+    }
+    #ev-hint {
+      position:absolute;
+      left:22px;
+      bottom:150px;
+      color:white;
+      background:#0009;
+      padding:7px;
+      border-radius:8px;
+      font:12px system-ui;
+    }
+  </style>
+  <div id="ev-hint">MOVE · JOYSTICK · DRAG TO LOOK</div>
+  <div id="ev-stick"><div id="ev-knob"></div></div>
   `;
 
   document.body.appendChild(ui);
@@ -307,25 +287,18 @@ export async function createEarthverseHumans({
   const input = {
     x: 0,
     y: 0,
-    keys: Object.create(null),
-    yaw: 0
+    yaw: 0,
+    keys: {}
   };
 
   let stickPointer = null;
   let lookPointer = null;
   let lastX = 0;
 
-  const center = () => ({
-    x: stick.clientWidth / 2,
-    y: stick.clientHeight / 2
-  });
-
-  function stickMove(event) {
+  function updateStick(event) {
     const rect = stick.getBoundingClientRect();
-    const c = center();
-
-    const dx = event.clientX - rect.left - c.x;
-    const dy = event.clientY - rect.top - c.y;
+    const dx = event.clientX - rect.left - rect.width / 2;
+    const dy = event.clientY - rect.top - rect.height / 2;
 
     const max = rect.width * 0.34;
     const length = Math.hypot(dx, dy) || 1;
@@ -335,24 +308,21 @@ export async function createEarthverseHumans({
     input.y = dy * factor / max;
 
     knob.style.transform =
-      `translate(${input.x * max}px, ${input.y * max}px)`;
+      `translate(${input.x * max}px,${input.y * max}px)`;
   }
 
   stick.addEventListener('pointerdown', event => {
     stickPointer = event.pointerId;
     stick.setPointerCapture(event.pointerId);
-    stickMove(event);
+    updateStick(event);
   });
 
   stick.addEventListener('pointermove', event => {
-    if (event.pointerId === stickPointer) {
-      stickMove(event);
-    }
+    if (event.pointerId === stickPointer) updateStick(event);
   });
 
   function releaseStick(event) {
     if (event.pointerId !== stickPointer) return;
-
     stickPointer = null;
     input.x = 0;
     input.y = 0;
@@ -362,39 +332,28 @@ export async function createEarthverseHumans({
   stick.addEventListener('pointerup', releaseStick);
   stick.addEventListener('pointercancel', releaseStick);
 
-  // Keyboard controls.
-  const onKeyDown = event => {
-    input.keys[event.code] = true;
-  };
-
-  const onKeyUp = event => {
-    input.keys[event.code] = false;
-  };
+  const onKeyDown = e => input.keys[e.code] = true;
+  const onKeyUp = e => input.keys[e.code] = false;
 
   window.addEventListener('keydown', onKeyDown);
   window.addEventListener('keyup', onKeyUp);
 
-  // Camera drag controls.
   const canvas = renderer.domElement;
 
-  const onLookDown = event => {
-    if (stick.contains(event.target)) return;
-
-    lookPointer = event.pointerId;
-    lastX = event.clientX;
+  const onLookDown = e => {
+    if (stick.contains(e.target)) return;
+    lookPointer = e.pointerId;
+    lastX = e.clientX;
   };
 
-  const onLookMove = event => {
-    if (event.pointerId !== lookPointer) return;
-
-    input.yaw -= (event.clientX - lastX) * 0.006;
-    lastX = event.clientX;
+  const onLookMove = e => {
+    if (e.pointerId !== lookPointer) return;
+    input.yaw -= (e.clientX - lastX) * 0.006;
+    lastX = e.clientX;
   };
 
-  const onLookUp = event => {
-    if (event.pointerId === lookPointer) {
-      lookPointer = null;
-    }
+  const onLookUp = e => {
+    if (e.pointerId === lookPointer) lookPointer = null;
   };
 
   canvas.addEventListener('pointerdown', onLookDown);
@@ -402,71 +361,52 @@ export async function createEarthverseHumans({
   window.addEventListener('pointerup', onLookUp);
   window.addEventListener('pointercancel', onLookUp);
 
-  // Camera and movement variables.
-  const clock = new T.Clock();
-
-  const desired = new T.Vector3();
-  const lookAt = new T.Vector3();
   const forward = new T.Vector3();
   const right = new T.Vector3();
-  const move = new T.Vector3();
-  const worldMove = new T.Vector3();
-
-  const cameraOffset = new T.Vector3(0, 3.1, 6.5);
+  const movement = new T.Vector3();
+  const desiredCamera = new T.Vector3();
+  const target = new T.Vector3();
 
   let elapsed = 0;
 
-  // Main update function.
-  function update(deltaTime) {
-    let dt = Number.isFinite(deltaTime)
-      ? deltaTime
-      : clock.getDelta();
-
-    dt = Math.min(Math.max(dt, 0), 0.05);
+  function update(deltaTime = 0.016) {
+    const dt = Math.min(Math.max(deltaTime || 0.016, 0), 0.05);
     elapsed += dt;
 
-    // Read player input.
-    const kx =
-      (input.keys.KeyD || input.keys.ArrowRight ? 1 : 0) -
-      (input.keys.KeyA || input.keys.ArrowLeft ? 1 : 0) +
+    const x =
+      (input.keys.KeyD ? 1 : 0) -
+      (input.keys.KeyA ? 1 : 0) +
       input.x;
 
-    const ky =
-      (input.keys.KeyS || input.keys.ArrowDown ? 1 : 0) -
-      (input.keys.KeyW || input.keys.ArrowUp ? 1 : 0) +
+    const z =
+      (input.keys.KeyS ? 1 : 0) -
+      (input.keys.KeyW ? 1 : 0) +
       input.y;
 
-    move.set(kx, 0, ky);
+    movement.set(x, 0, z);
 
-    if (move.lengthSq() > 1) {
-      move.normalize();
-    }
-
-    const heading = input.yaw;
+    if (movement.lengthSq() > 1) movement.normalize();
 
     forward.set(
-      -Math.sin(heading),
+      -Math.sin(input.yaw),
       0,
-      -Math.cos(heading)
+      -Math.cos(input.yaw)
     );
 
     right.set(
-      Math.cos(heading),
+      Math.cos(input.yaw),
       0,
-      -Math.sin(heading)
+      -Math.sin(input.yaw)
     );
 
-    worldMove.set(0, 0, 0)
-      .addScaledVector(right, move.x)
-      .addScaledVector(forward, -move.z);
+    const worldMove = new T.Vector3()
+      .addScaledVector(right, movement.x)
+      .addScaledVector(forward, -movement.z);
 
-    const playerMoving = worldMove.lengthSq() > 0.0001;
+    const moving = worldMove.lengthSq() > 0.001;
 
-    // Move player.
-    if (playerMoving) {
-      const speed = 3.4;
-
-      player.position.addScaledVector(worldMove, speed * dt);
+    if (moving) {
+      player.position.addScaledVector(worldMove, 3.4 * dt);
 
       player.rotation.y = Math.atan2(
         worldMove.x,
@@ -474,73 +414,64 @@ export async function createEarthverseHumans({
       );
     }
 
-    animateCharacter(
-      playerCharacter,
-      elapsed,
-      playerMoving
-    );
+    animateCharacter(playerCharacter, elapsed, moving);
 
-    // NPC AI movement and walking.
+    // NPC wandering around individual home positions.
     for (const npc of npcData) {
-      npc.changeIn -= dt;
+      npc.timer -= dt;
 
-      if (npc.changeIn <= 0) {
-        npc.angle += (Math.random() - 0.5) * 2.4;
-        npc.changeIn = 2 + Math.random() * 4;
+      if (npc.timer <= 0) {
+        npc.angle += (Math.random() - 0.5) * 2.5;
+        npc.timer = 2 + Math.random() * 3;
       }
 
-      const nx = Math.sin(npc.angle);
-      const nz = Math.cos(npc.angle);
+      const dx = Math.sin(npc.angle) * npc.speed * dt;
+      const dz = Math.cos(npc.angle) * npc.speed * dt;
 
-      npc.root.position.x += nx * npc.speed * dt;
-      npc.root.position.z += nz * npc.speed * dt;
+      const nextX = npc.root.position.x + dx;
+      const nextZ = npc.root.position.z + dz;
 
-      const dx = npc.root.position.x - npc.home.x;
-      const dz = npc.root.position.z - npc.home.z;
+      const homeDX = nextX - npc.home.x;
+      const homeDZ = nextZ - npc.home.z;
 
-      // Keep NPCs near their home positions.
-      if (dx * dx + dz * dz > 100) {
-        npc.angle = Math.atan2(-dx, -dz);
+      if (homeDX * homeDX + homeDZ * homeDZ < 36) {
+        npc.root.position.x = nextX;
+        npc.root.position.z = nextZ;
+      } else {
+        npc.angle = Math.atan2(-homeDX, -homeDZ);
       }
 
-      npc.root.rotation.y = Math.atan2(nx, nz);
-
-      animateCharacter(
-        npc.character,
-        elapsed,
-        true
-      );
+      npc.root.rotation.y = npc.angle;
+      animateCharacter(npc.character, elapsed, true);
     }
 
-    // Third-person follow camera.
-    const c = Math.cos(heading);
-    const s = Math.sin(heading);
+    // Follow camera.
+    const c = Math.cos(input.yaw);
+    const s = Math.sin(input.yaw);
 
-    desired.set(
-      player.position.x + cameraOffset.x * c + cameraOffset.z * s,
-      player.position.y + cameraOffset.y,
-      player.position.z - cameraOffset.x * s + cameraOffset.z * c
+    desiredCamera.set(
+      player.position.x + 6.5 * s,
+      player.position.y + 3.1,
+      player.position.z + 6.5 * c
     );
 
-    camera.position.lerp(
-      desired,
-      1 - Math.exp(-6 * dt)
-    );
+    camera.position.lerp(desiredCamera, 1 - Math.exp(-6 * dt));
 
-    lookAt.set(
+    target.set(
       player.position.x,
       player.position.y + 1.05,
       player.position.z
     );
 
-    camera.lookAt(lookAt);
+    camera.lookAt(target);
   }
 
-  // Return system API.
   return {
     player,
     npcs,
     update,
+    world,
+    mapBounds,
 
     dispose() {
       ui.remove();
