@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<meta name="theme-color" content="#101820">
+<title>EARTHVERSE | Phase 2</title>
+<style>
+:root{color-scheme:dark}*{box-sizing:border-box}
+html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#101820;font-family:system-ui,-apple-system,Segoe UI,sans-serif;color:#fff}
+#world{position:fixed;inset:0}canvas{display:block;width:100%;height:100%;touch-action:none}
+.panel{background:rgba(8,17,24,.78);border:1px solid #ffffff30;backdrop-filter:blur(12px);border-radius:14px;padding:10px 12px;box-shadow:0 8px 24px #0005}
+#topbar{position:fixed;top:env(safe-area-inset-top,10px);left:10px;right:10px;display:flex;justify-content:space-between;gap:8px;pointer-events:none}
+.brand{font-size:15px;font-weight:900;letter-spacing:2px}.sub{font-size:10px;color:#b9cbd3;margin-top:2px}
+#stats{font-size:11px;color:#d5e5eb;text-align:right;line-height:1.6}
+#controls{position:fixed;left:12px;right:12px;bottom:calc(12px + env(safe-area-inset-bottom,0px));display:flex;justify-content:space-between;align-items:end;pointer-events:none}
+#pad{display:grid;grid-template-columns:48px 48px 48px;grid-template-rows:48px 48px 48px;gap:4px;pointer-events:auto}
+.ctrl{border:1px solid #ffffff55;background:#10232ddd;color:white;border-radius:12px;font-size:18px;font-weight:800;touch-action:none;user-select:none}
+.ctrl:active,.ctrl.active{background:#247b78}
+#pad .up{grid-column:2;grid-row:1}#pad .left{grid-column:1;grid-row:2}#pad .down{grid-column:2;grid-row:2}#pad .right{grid-column:3;grid-row:2}
+#actions{display:flex;flex-direction:column;gap:7px;pointer-events:auto;align-items:flex-end}
+.action{font-size:12px;padding:11px 12px;min-width:132px;text-align:center}
+#hint{position:fixed;left:50%;transform:translateX(-50%);bottom:158px;background:#07131de0;border:1px solid #ffffff2a;padding:7px 11px;border-radius:20px;font-size:10px;color:#d5e5eb;white-space:nowrap;pointer-events:none}
+#toast{position:fixed;top:82px;left:50%;transform:translateX(-50%);background:#07131df0;padding:9px 13px;border-radius:10px;font-size:12px;opacity:0;transition:opacity .2s;pointer-events:none;max-width:90%;text-align:center}
+#profile{position:fixed;left:10px;right:10px;bottom:170px;max-width:330px;margin:auto;display:none;pointer-events:none}
+#profile strong{font-size:14px}#profile small{color:#bdd0d8;line-height:1.5}
+#loading{position:fixed;inset:0;display:grid;place-items:center;background:#101820;z-index:5;transition:opacity .4s}
+#loading div{text-align:center}.spinner{width:34px;height:34px;border:3px solid #ffffff30;border-top-color:#6ee7c8;border-radius:50%;animation:spin .8s linear infinite;margin:0 auto 14px}
+@keyframes spin{to{transform:rotate(360deg)}}
+@media(min-width:800px){#pad{opacity:.75}.ctrl{width:52px;height:52px}#hint{bottom:18px}}
+</style>
+</head>
+<body>
+<div id="world"></div>
+<div id="topbar">
+ <div class="panel"><div class="brand">EARTHVERSE</div><div class="sub">A LIVING AI PLANET · PHASE 2</div></div>
+ <div class="panel" id="stats">CITIZENS <b id="citizenCount">12</b><br>TIME <b id="clock">08:00</b><br>MODE <b id="modeLabel">FOLLOW</b><br>NEARBY <b id="nearby">0</b></div>
+</div>
+<div id="hint">Move near a citizen · Tap INTERACT · Drag to look</div>
+<div id="profile" class="panel"><strong id="pname">Citizen</strong><br><small id="pinfo"></small></div>
+<div id="controls">
+ <div id="pad">
+  <button class="ctrl up" data-key="forward">▲</button><button class="ctrl left" data-key="left">◀</button>
+  <button class="ctrl down" data-key="back">▼</button><button class="ctrl right" data-key="right">▶</button>
+ </div>
+ <div id="actions">
+  <button class="ctrl action" id="interactBtn">💬 INTERACT</button>
+  <button class="ctrl action" id="cameraBtn">📷 Camera: Follow</button>
+  <button class="ctrl action" id="timeBtn">🌙 Night mode</button>
+  <button class="ctrl action" id="resetBtn">↺ Reset view</button>
+ </div>
+</div>
+<div id="toast"></div>
+<div id="loading"><div><div class="spinner"></div><b>BUILDING EARTHVERSE PHASE 2</b><div class="sub">Creating citizens and city life...</div></div></div>
+<script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js"}}</script>
+<script type="module">
+import * as THREE from 'three';
+const mount=document.getElementById('world'),scene=new THREE.Scene();
+scene.background=new THREE.Color(0x9bc8dc);scene.fog=new THREE.Fog(0x9bc8dc,95,245);
+const camera=new THREE.PerspectiveCamera(65,innerWidth/innerHeight,.1,600);camera.position.set(0,8,15);
+const renderer=new THREE.WebGLRenderer({antialias:true,powerPreference:'high-performance'});
+renderer.setPixelRatio(Math.min(devicePixelRatio,1.5));renderer.setSize(innerWidth,innerHeight);
+renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;
+renderer.outputColorSpace=THREE.SRGBColorSpace;renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=1.05;
+mount.appendChild(renderer.domElement);
+const hemi=new THREE.HemisphereLight(0xd9efff,0x64715b,1.8);scene.add(hemi);
+const sun=new THREE.DirectionalLight(0xffedcf,2.8);sun.position.set(-35,65,25);sun.castShadow=true;
+sun.shadow.mapSize.set(1024,1024);sun.shadow.camera.left=-80;sun.shadow.camera.right=80;sun.shadow.camera.top=80;sun.shadow.camera.bottom=-80;scene.add(sun);
+const mat=(color,roughness=.82,metalness=0)=>new THREE.MeshStandardMaterial({color,roughness,metalness});
+const groundMat=mat(0x638b61),roadMat=mat(0x30383d),sideMat=mat(0xbdbdaf),lineMat=mat(0xe8e1c8);
+const ground=new THREE.Mesh(new THREE.PlaneGeometry(280,280),groundMat);ground.rotation.x=-Math.PI/2;ground.position.y=-.08;ground.receiveShadow=true;scene.add(ground);
+function box(w,h,d,material,x,y,z,cast=true){const m=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),material);m.position.set(x,y,z);m.castShadow=cast;m.receiveShadow=true;scene.add(m);return m}
+function road(w,d,x,z){box(w,.12,d,roadMat,x,0,z,false);box(w,.035,.16,lineMat,x,.08,z-d/2+1.1,false);box(w,.035,.16,lineMat,x,.08,z+d/2-1.1,false)}
+road(220,14,0,0);road(14,220,0,0);road(220,9,0,48);road(220,9,0,-48);road(9,220,48,0);road(9,220,-48,0);
+for(let i=-100;i<=100;i+=9){box(3,.025,.2,lineMat,i,.075,0,false);box(.2,.025,3,lineMat,0,.075,i,false)}
+for(let z=-100;z<=100;z+=24)for(let x=-100;x<=100;x+=24){if(Math.abs(x)<12||Math.abs(z)<12)continue;box(17,.16,17,sideMat,x,.04,z,false)}
+let seed=42;function rand(){seed=(seed*9301+49297)%233280;return seed/233280}
+const buildingMats=[0xd8d1c5,0xb7c8c8,0xd5bda0,0x9cabb6,0xe0dfd5,0xc2b6a5].map(c=>mat(c));
+const roofMat=mat(0x48545a),windowMat=new THREE.MeshStandardMaterial({color:0x8eb9c9,roughness:.24,metalness:.12,emissive:0x152b38});
+function building(x,z,w,d,h,i){const b=box(w,h,d,buildingMats[i%buildingMats.length],x,h/2+.16,z);box(w+.25,.22,d+.25,roofMat,x,h+.25,z);
+ const rows=Math.min(6,Math.floor(h/2.8));for(let r=0;r<rows;r++)for(let c=0;c<Math.max(1,Math.floor(w/2.6));c++){let win=new THREE.Mesh(new THREE.BoxGeometry(.85,1.05,.055),windowMat);win.position.set(x-w/2+1.4+c*2.6,2+r*2.7,z-d/2-.04);scene.add(win)}}
+let bi=0;for(let z=-90;z<=90;z+=24)for(let x=-90;x<=90;x+=24){if(Math.abs(x)<19||Math.abs(z)<19)continue;building(x+(rand()-.5)*3,z+(rand()-.5)*3,8+rand()*6,8+rand()*6,8+rand()*24,bi++)}
+building(20,20,13,13,38,2);
+const parkMat=mat(0x4b8950);box(23,.18,23,parkMat,-23,.08,-23,false);
+function tree(x,z,s=1){const trunk=new THREE.Mesh(new THREE.CylinderGeometry(.16*s,.24*s,2*s,8),mat(0x68452d));trunk.position.set(x,s,z);trunk.castShadow=true;scene.add(trunk);const crown=new THREE.Mesh(new THREE.IcosahedronGeometry(1.25*s,1),mat(0x34764a));crown.position.set(x,2.5*s,z);crown.castShadow=true;scene.add(crown)}
+for(let i=0;i<70;i++){let x=(rand()-.5)*195,z=(rand()-.5)*195;if(Math.abs(x)<14||Math.abs(z)<14||(Math.abs(x)<35&&Math.abs(z)<35))continue;tree(x,z,.7+rand()*.6)}
+for(let i=0;i<14;i++)tree(-31+(i%4)*4,-31+Math.floor(i/4)*4,.85);
+// Citizen data and modular humanoid models
+const names=['Aarav','Mira','Kavin','Anaya','Ishaan','Nila','Dev','Tara','Arjun','Diya','Rohan','Meera'];
+const jobs=['Teacher','Doctor','Engineer','Shopkeeper','Artist','Chef','Scientist','Driver','Designer','Nurse','Farmer','Student'];
+const traits=['Friendly','Curious','Calm','Creative','Helpful','Energetic'];
+const skinColors=[0xb87952,0x8f5d43,0xd5a17c,0x9c694e,0xc58d69],shirtColors=[0x287b78,0x456b9b,0xb36c42,0x76548d,0x9b4f50,0x647d42,0x9b7950];
+const citizens=[];
+function makeCitizen(i){
+ const g=new THREE.Group(),shirt=mat(shirtColors[i%shirtColors.length]),skin=mat(skinColors[i%skinColors.length]),dark=mat(0x292522),pants=mat(0x293744),shoe=mat(0x151b20);
+ const torso=new THREE.Mesh(new THREE.CapsuleGeometry(.31,.58,5,10),shirt);torso.position.y=1.12;torso.castShadow=true;g.add(torso);
+ const neck=new THREE.Mesh(new THREE.CylinderGeometry(.09,.1,.16,8),skin);neck.position.y=1.56;g.add(neck);
+ const head=new THREE.Mesh(new THREE.SphereGeometry(.245,16,12),skin);head.position.y=1.78;head.castShadow=true;g.add(head);
+ const hair=new THREE.Mesh(new THREE.SphereGeometry(.25,14,9,0,Math.PI*2,0,Math.PI*.53),dark);hair.position.y=1.85;g.add(hair);
+ const legs=[],arms=[];
+ for(let n=0;n<2;n++){
+  const leg=new THREE.Mesh(new THREE.CapsuleGeometry(.105,.43,4,8),pants);leg.position.set(n===0?-.14:.14,.48,0);leg.castShadow=true;g.add(leg);legs.push(leg);
+  const arm=new THREE.Mesh(new THREE.CapsuleGeometry(.085,.42,4,8),shirt);arm.position.set(n===0?-.39:.39,1.12,0);arm.rotation.z=n===0?-.12:.12;arm.castShadow=true;g.add(arm);arms.push(arm);
+  const foot=new THREE.Mesh(new THREE.BoxGeometry(.17,.12,.29),shoe);foot.position.set(n===0?-.14:.14,.13,.055);g.add(foot);
+ }
+ g.position.set((rand()-.5)*42,0,(rand()-.5)*42);scene.add(g);
+ const data={id:i+1,name:names[i],age:19+Math.floor(rand()*36),job:jobs[i],trait:traits[i%traits.length],home:'Residential District',goal:'Exploring the neighbourhood'};
+ const c={group:g,legs,arms,phase:rand()*6.28,speed:.65+rand()*.35,angle:rand()*6.28,turn:rand()*3+1,data,state:'wander',talk:0};citizens.push(c);return c;
+}
+for(let i=0;i<12;i++)makeCitizen(i);
+const player=new THREE.Group();player.position.set(0,0,8);scene.add(player);
+const playerBody=new THREE.Mesh(new THREE.CapsuleGeometry(.34,.72,5,10),mat(0x159b94));playerBody.position.y=1.15;player.add(playerBody);
+const playerHead=new THREE.Mesh(new THREE.SphereGeometry(.27,14,12),mat(0xc58d69));playerHead.position.y=1.91;player.add(playerHead);
+const playerHair=new THREE.Mesh(new THREE.SphereGeometry(.28,14,9,0,Math.PI*2,0,Math.PI*.53),mat(0x252321));playerHair.position.y=1.98;player.add(playerHair);
+let follow=true,night=false,clockMinutes=8*60,yaw=0,pitch=.25,dragging=false,lastX=0,lastY=0;
+const keys={forward:false,back:false,left:false,right:false},clockEl=document.getElementById('clock');
+function toast(msg){const t=document.getElementById('toast');t.textContent=msg;t.style.opacity=1;clearTimeout(toast.timer);toast.timer=setTimeout(()=>t.style.opacity=0,1900)}
+function setNight(v){night=v;const c=night?0x101a2c:0x9bc8dc;scene.background.setHex(c);scene.fog.color.setHex(c);sun.intensity=night?.28:2.8;hemi.intensity=night?.55:1.8;renderer.toneMappingExposure=night?.72:1.05;document.getElementById('timeBtn').textContent=night?'☀️ Day mode':'🌙 Night mode';toast(night?'Night mode enabled':'Day mode enabled')}
+document.getElementById('timeBtn').onclick=()=>setNight(!night);
+document.getElementById('cameraBtn').onclick=()=>{follow=!follow;document.getElementById('modeLabel').textContent=follow?'FOLLOW':'FREE';document.getElementById('cameraBtn').textContent=follow?'📷 Camera: Follow':'📷 Camera: Free';toast(follow?'Follow camera':'Free camera')};
+document.getElementById('resetBtn').onclick=()=>{player.position.set(0,0,8);yaw=0;pitch=.25;follow=true;document.getElementById('modeLabel').textContent='FOLLOW';document.getElementById('cameraBtn').textContent='📷 Camera: Follow';toast('View reset')};
+document.querySelectorAll('[data-key]').forEach(btn=>{const k=btn.dataset.key,on=e=>{e.preventDefault();keys[k]=true;btn.classList.add('active')},off=e=>{e.preventDefault();keys[k]=false;btn.classList.remove('active')};btn.addEventListener('pointerdown',on);btn.addEventListener('pointerup',off);btn.addEventListener('pointercancel',off);btn.addEventListener('pointerleave',off)});
+addEventListener('keydown',e=>{if(e.code==='KeyW'||e.code==='ArrowUp')keys.forward=true;if(e.code==='KeyS'||e.code==='ArrowDown')keys.back=true;if(e.code==='KeyA'||e.code==='ArrowLeft')keys.left=true;if(e.code==='KeyD'||e.code==='ArrowRight')keys.right=true});
+addEventListener('keyup',e=>{if(e.code==='KeyW'||e.code==='ArrowUp')keys.forward=false;if(e.code==='KeyS'||e.code==='ArrowDown')keys.back=false;if(e.code==='KeyA'||e.code==='ArrowLeft')keys.left=false;if(e.code==='KeyD'||e.code==='ArrowRight')keys.right=false});
+renderer.domElement.addEventListener('pointerdown',e=>{dragging=true;lastX=e.clientX;lastY=e.clientY;renderer.domElement.setPointerCapture(e.pointerId)});
+renderer.domElement.addEventListener('pointermove',e=>{if(!dragging)return;const dx=e.clientX-lastX,dy=e.clientY-lastY;lastX=e.clientX;lastY=e.clientY;yaw-=dx*.004;pitch=Math.max(-.15,Math.min(.85,pitch+dy*.003))});
+renderer.domElement.addEventListener('pointerup',()=>dragging=false);renderer.domElement.addEventListener('pointercancel',()=>dragging=false);
+function getNearest(){let best=null,dist=999;for(const c of citizens){const d=c.group.position.distanceTo(player.position);if(d<dist){dist=d;best=c}}return dist<5?best:null}
+function showCitizen(c){if(!c){toast('Move closer to a citizen first');return}document.getElementById('pname').textContent=c.data.name+' · Citizen #'+c.data.id;document.getElementById('pinfo').textContent='Age '+c.data.age+' · '+c.data.job+' · '+c.data.trait+' personality. Current activity: '+c.data.goal+'.';document.getElementById('profile').style.display='block';toast(c.data.name+': Hello! Nice to meet you.')}
+document.getElementById('interactBtn').onclick=()=>{const c=getNearest();showCitizen(c)};
+const clock=new THREE.Clock();
+function animate(){
+ requestAnimationFrame(animate);const dt=Math.min(clock.getDelta(),.04),t=clock.elapsedTime;
+ const f=(keys.forward?1:0)-(keys.back?1:0),s=(keys.right?1:0)-(keys.left?1:0),moving=f!==0||s!==0;
+ if(moving){const dx=Math.sin(yaw)*f+Math.cos(yaw)*s,dz=Math.cos(yaw)*f-Math.sin(yaw)*s,len=Math.hypot(dx,dz)||1;player.position.x+=dx/len*7*dt;player.position.z+=dz/len*7*dt;player.rotation.y=Math.atan2(dx,dz)}
+ player.position.x=THREE.MathUtils.clamp(player.position.x,-108,108);player.position.z=THREE.MathUtils.clamp(player.position.z,-108,108);
+ playerBody.position.y=1.15+(moving?Math.abs(Math.sin(t*10))*.055:0);
+ for(const c of citizens){
+  c.phase+=dt*c.speed*5;c.turn-=dt;
+  // Simple autonomous routines: citizens change goals with the simulated time.
+  const hour=Math.floor(clockMinutes/60);
+  c.data.goal=hour<9?'Going to work':hour<12?'Working':hour<14?'Taking a lunch break':hour<18?'Working or shopping':hour<21?'Meeting neighbours':'Going home';
+  if(c.turn<=0){c.angle+=(rand()-.5)*2.2;c.turn=1.5+rand()*4}
+  c.group.position.x+=Math.sin(c.angle)*c.speed*dt;c.group.position.z+=Math.cos(c.angle)*c.speed*dt;
+  c.group.position.x=THREE.MathUtils.clamp(c.group.position.x,-105,105);c.group.position.z=THREE.MathUtils.clamp(c.group.position.z,-105,105);
+  c.group.rotation.y=c.angle;c.legs[0].rotation.x=Math.sin(c.phase)*.62;c.legs[1].rotation.x=-Math.sin(c.phase)*.62;c.arms[0].rotation.x=-Math.sin(c.phase)*.35;c.arms[1].rotation.x=Math.sin(c.phase)*.35;
+ }
+ const near=citizens.filter(c=>c.group.position.distanceTo(player.position)<5).length;document.getElementById('nearby').textContent=near;
+ clockMinutes=(clockMinutes+dt*2)%1440;const hh=Math.floor(clockMinutes/60),mm=Math.floor(clockMinutes%60);clockEl.textContent=String(hh).padStart(2,'0')+':'+String(mm).padStart(2,'0');
+ if(follow){const dist=9,target=new THREE.Vector3(player.position.x-Math.sin(yaw)*dist,3.5+pitch*3,player.position.z-Math.cos(yaw)*dist);camera.position.lerp(target,1-Math.pow(.001,dt));camera.lookAt(player.position.x,1.3,player.position.z)}
+ else{const target=new THREE.Vector3(player.position.x,1.5,player.position.z),dir=new THREE.Vector3(Math.sin(yaw)*Math.cos(pitch),Math.sin(pitch),Math.cos(yaw)*Math.cos(pitch));camera.position.lerp(target.clone().add(dir.multiplyScalar(-10)),.08);camera.lookAt(target)}
+ renderer.render(scene,camera);
+}
+animate();document.getElementById('citizenCount').textContent=citizens.length;
+setTimeout(()=>{const l=document.getElementById('loading');l.style.opacity=0;setTimeout(()=>l.remove(),450);toast('Welcome to EARTHVERSE Phase 2!')},900);
+addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight);renderer.setPixelRatio(Math.min(devicePixelRatio,1.5))});
+</script>
+</body></html>
