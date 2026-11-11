@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<meta name="theme-color" content="#101b2a">
+<title>EARTHVERSE — Open World</title>
+<style>
+*{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#101b2a;color:#fff;font-family:system-ui,Arial}
+#game{position:fixed;inset:0}canvas{display:block;width:100%;height:100%;touch-action:none}
+#top{position:fixed;top:env(safe-area-inset-top,8px);left:10px;right:10px;display:flex;gap:8px;align-items:center;z-index:5;pointer-events:none}
+.pill{background:#071522c9;border:1px solid #ffffff35;border-radius:12px;padding:8px 11px;font-size:12px;backdrop-filter:blur(8px)}
+#status{flex:1;min-width:0}
+#actions{position:fixed;top:58px;right:10px;z-index:8;display:flex;gap:7px;flex-direction:column}
+button{color:#fff;background:#12263bdc;border:1px solid #9dc7e766;border-radius:11px;padding:10px 12px;font-weight:650;font-size:12px;touch-action:manipulation}
+#help{position:fixed;left:10px;bottom:12px;z-index:5;max-width:calc(100% - 160px);font-size:11px;color:#e8f4ff;background:#071522b9;padding:8px 10px;border-radius:10px;pointer-events:none}
+#dialog{display:none;position:fixed;left:50%;bottom:150px;transform:translateX(-50%);z-index:12;background:#071522ee;border:1px solid #ffffff55;border-radius:14px;padding:12px;width:min(340px,90vw)}
+#dialog p{font-size:13px;margin:0 0 10px}
+#dialog input{width:100%;padding:10px;border-radius:9px;border:1px solid #789;color:#111}
+#dialog button{margin-top:8px}
+#loading{position:fixed;inset:0;display:grid;place-items:center;background:#101b2a;z-index:20;text-align:center;padding:24px}
+#loading small{display:block;color:#b9cde0;margin-top:8px}
+#toast{position:fixed;left:50%;top:100px;transform:translateX(-50%);z-index:15;background:#081827e8;padding:9px 14px;border-radius:12px;font-size:12px;display:none}
+@media(min-width:800px){#help{max-width:480px}}
+</style>
+<script type="importmap">
+{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"}}
+</script>
+</head>
+<body>
+<div id="game"></div>
+<div id="top"><div id="status" class="pill">EARTHVERSE · Loading world…</div><div class="pill">ANDROID READY</div></div>
+<div id="actions">
+<button id="cameraBtn">Camera: THIRD PERSON</button>
+<button id="weatherBtn">Weather: CLEAR</button>
+<button id="talkBtn">Talk to citizen</button>
+<button id="saveBtn">Save world</button>
+</div>
+<div id="help">MOVE: left joystick · LOOK: drag screen · Desktop: WASD + mouse drag<br>Explore the NFS Cornerstone map and meet its citizens.</div>
+<div id="toast"></div>
+<div id="dialog"><p id="dialogText">Citizen</p><input id="say" maxlength="100" placeholder="Say hello…"><button id="send">Send</button><button id="closeDialog">Close</button></div>
+<div id="loading"><div><strong>EARTHVERSE</strong><small id="loadText">Preparing your world…</small></div></div>
+
+<script type="module">
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { createEarthverseHumans } from './earthverse_humans.js';
+import { createCivilization } from './earthverse_civilization.js';
+
+const mount=document.querySelector('#game');
+const scene=new THREE.Scene();
+scene.background=new THREE.Color(0x9bbbd1);
+scene.fog=new THREE.Fog(0x9bbbd1,90,360);
+const camera=new THREE.PerspectiveCamera(65,innerWidth/innerHeight,.1,700);
+camera.position.set(0,5,12);
+const renderer=new THREE.WebGLRenderer({antialias:false,powerPreference:'high-performance'});
+renderer.setPixelRatio(Math.min(devicePixelRatio||1,1.5));
+renderer.setSize(innerWidth,innerHeight);
+renderer.shadowMap.enabled=false;
+renderer.outputColorSpace=THREE.SRGBColorSpace;
+mount.appendChild(renderer.domElement);
+scene.add(new THREE.HemisphereLight(0xd9edff,0x52604a,2.0));
+const sun=new THREE.DirectionalLight(0xffedcf,2.2);sun.position.set(-45,90,30);scene.add(sun);
+
+const mat=(color,roughness=.9)=>new THREE.MeshStandardMaterial({color,roughness});
+
+// Load ONLY the newly supplied map. No generated fallback city and no previous city GLB.
+document.querySelector('#loadText').textContent='Loading NFS Cornerstone map…';
+const mapGLTF=await new GLTFLoader().loadAsync('./assets/nfs_no_limits_-_cornerstone.glb');
+const mapRoot=mapGLTF.scene;
+mapRoot.name='EARTHVERSE_ACTIVE_MAP';
+mapRoot.updateMatrixWorld(true);
+const mapBounds=new THREE.Box3().setFromObject(mapRoot);
+const mapSize=mapBounds.getSize(new THREE.Vector3());
+const mapCenter=mapBounds.getCenter(new THREE.Vector3());
+// The source asset is a small corner/track section; scale it for human-scale gameplay.
+const mapScale=8;
+mapRoot.scale.setScalar(mapScale);
+mapRoot.position.set(-mapCenter.x*mapScale, -mapBounds.min.y*mapScale, -mapCenter.z*mapScale);
+mapRoot.traverse(o=>{
+ if(o.isMesh){
+  o.frustumCulled=true;
+  o.castShadow=false;
+  o.receiveShadow=false;
+  if(o.material){const mats=Array.isArray(o.material)?o.material:[o.material];for(const m of mats){m.side=THREE.FrontSide;}}
+ }
+});
+scene.add(mapRoot);
+const mapWorldSize={x:mapSize.x*mapScale,z:mapSize.z*mapScale};
+const cityLoaded=true;
+document.querySelector('#loadText').textContent='NFS Cornerstone map loaded.';
+// Low-poly future traffic props; these are scenery placeholders, not drivable vehicles yet.
+const traffic=[];
+function addVehicle(x,z,color){
+ const g=new THREE.Group();
+ const body=new THREE.Mesh(new THREE.BoxGeometry(2.1,.65,4.2),mat(color,.45));body.position.y=.65;g.add(body);
+ const cabin=new THREE.Mesh(new THREE.BoxGeometry(1.65,.65,1.8),mat(0x8db4c9,.3));cabin.position.set(0,1.2,-.2);g.add(cabin);
+ const wheelMat=mat(0x15191e);
+ for(const wx of [-.95,.95])for(const wz of [-1.35,1.35]){const w=new THREE.Mesh(new THREE.CylinderGeometry(.36,.36,.2,10),wheelMat);w.rotation.z=Math.PI/2;w.position.set(wx,.38,wz);g.add(w);}
+ g.position.set(x,0,z);scene.add(g);traffic.push(g);
+}
+for(let i=0;i<8;i++)addVehicle(-25+i*7,14+(i%2)*3,[0x39a9a5,0x8295a5,0xc4a35a,0x697a9b][i%4]);
+
+document.querySelector('#loadText').textContent='Loading player and citizens…';
+const humans=await createEarthverseHumans({THREE,scene,camera,renderer,modelUrl:'./assets/jane_doe_blender_release_optimized.glb',npcCount:5});
+const civilization=createCivilization({citizens:humans.npcs,worldName:'EARTHVERSE',citizenCount:humans.npcs.length});
+document.querySelector('#loading').style.display='none';
+
+let freeCamera=false,weather=0,clock=0,dialogCitizen=null;
+let freeYaw=0,freePitch=-.25,freePointer=null,lastX=0,lastY=0;
+const freeKeys={};
+addEventListener('keydown',e=>freeKeys[e.code]=true);
+addEventListener('keyup',e=>freeKeys[e.code]=false);
+renderer.domElement.addEventListener('pointerdown',e=>{if(freeCamera){freePointer=e.pointerId;lastX=e.clientX;lastY=e.clientY;}});
+addEventListener('pointermove',e=>{if(freePointer!==e.pointerId)return;freeYaw-=(e.clientX-lastX)*.004;freePitch=Math.max(-1.2,Math.min(1.2,freePitch-(e.clientY-lastY)*.004));lastX=e.clientX;lastY=e.clientY;});
+addEventListener('pointerup',e=>{if(e.pointerId===freePointer)freePointer=null;});
+document.querySelector('#cameraBtn').onclick=()=>{freeCamera=!freeCamera;document.querySelector('#cameraBtn').textContent='Camera: '+(freeCamera?'FREE':'THIRD PERSON');toast(freeCamera?'Free camera enabled':'Third-person camera enabled');};
+document.querySelector('#weatherBtn').onclick=()=>{weather=(weather+1)%3;const names=['CLEAR','CLOUDY','FOG'];document.querySelector('#weatherBtn').textContent='Weather: '+names[weather];scene.fog.near=weather===2?25:90;scene.fog.far=weather===2?150:360;sun.intensity=weather===1?1.1:2.2;scene.background.set(weather===2?0x77838b:weather===1?0x899eaa:0x9bbbd1);};
+function toast(s){const t=document.querySelector('#toast');t.textContent=s;t.style.display='block';clearTimeout(toast.timer);toast.timer=setTimeout(()=>t.style.display='none',2200);}
+function nearestCitizen(){let best=null,dist=Infinity;for(const c of civilization.citizens){const d=c.root.position.distanceTo(humans.player.position);if(d<dist){dist=d;best=c;}}return dist<12?best:null;}
+function openTalk(c){dialogCitizen=c;document.querySelector('#dialogText').textContent=`${c.name} · ${c.job} · ${c.activity}`;document.querySelector('#dialog').style.display='block';}
+document.querySelector('#talkBtn').onclick=()=>{const c=nearestCitizen();if(c)openTalk(c);else toast('Move closer to a citizen to talk.');};
+document.querySelector('#send').onclick=()=>{if(!dialogCitizen)return;const input=document.querySelector('#say');const message=input.value.trim()||'hello';const reply=civilization.talkTo(dialogCitizen.id,message);document.querySelector('#dialogText').textContent=dialogCitizen.name+': '+reply;input.value='';};
+document.querySelector('#closeDialog').onclick=()=>document.querySelector('#dialog').style.display='none';
+document.querySelector('#saveBtn').onclick=()=>{civilization.save();toast('World saved on this browser.');};
+
+const status=document.querySelector('#status');
+let last=performance.now();
+renderer.setAnimationLoop(now=>{
+ const dt=Math.min((now-last)/1000,.05);last=now;clock+=dt;
+ humans.update(dt);
+ civilization.update(dt);
+ // Simple day/night lighting cycle.
+ const phase=(clock/180)%1;
+ sun.position.set(Math.cos(phase*Math.PI*2)*80,Math.max(12,Math.sin(phase*Math.PI*2)*90),25);
+ sun.intensity=.45+1.8*Math.max(0,Math.sin(phase*Math.PI*2));
+ if(freeCamera){
+  const forward=new THREE.Vector3(-Math.sin(freeYaw),0,-Math.cos(freeYaw));
+  const right=new THREE.Vector3(Math.cos(freeYaw),0,-Math.sin(freeYaw));
+  const dir=new THREE.Vector3();
+  if(freeKeys.KeyW)dir.add(forward);if(freeKeys.KeyS)dir.sub(forward);
+  if(freeKeys.KeyD)dir.add(right);if(freeKeys.KeyA)dir.sub(right);
+  if(freeKeys.Space)dir.y+=1;if(freeKeys.ShiftLeft)dir.y-=1;
+  if(dir.lengthSq())camera.position.addScaledVector(dir.normalize(),dt*18);
+  camera.rotation.order='YXZ';camera.rotation.set(freePitch,freeYaw,0);
+ }
+ status.textContent=civilization.getStatusText()+' · NFS CORNERSTONE MAP';
+ renderer.render(scene,camera);
+});
+addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight);});
+addEventListener('pagehide',()=>civilization.dispose());
+</script>
+</body>
+</html>
