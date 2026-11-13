@@ -4,9 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
 <meta name="theme-color" content="#075b83">
-<title>EARTHVERSE — Island Civilization</title>
+<title>EARTHVERSE — Massive Island</title>
 <style>
-:root{--panel:#082b43eF;--line:#bceaff66}
+:root{--panel:#082b43ef;--line:#bceaff66}
 *{box-sizing:border-box}
 html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#087ca5;color:#fff;font-family:system-ui,Arial}
 canvas{display:block;width:100%;height:100%;touch-action:none}
@@ -14,7 +14,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none}
 .pill{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:8px 10px;font-size:12px;backdrop-filter:blur(8px);box-shadow:0 3px 12px #001a2a55}
 #status{flex:1;min-width:0}
 #buttons{position:fixed;right:10px;top:65px;z-index:5;display:flex;flex-direction:column;gap:7px}
-button{border:1px solid #c5ecff88;background:#092b45eF;color:white;border-radius:12px;padding:10px 12px;font-size:12px;font-weight:750;touch-action:manipulation}
+button{border:1px solid #c5ecff88;background:#092b45ef;color:white;border-radius:12px;padding:10px 12px;font-size:12px;font-weight:750;touch-action:manipulation}
 #help{position:fixed;left:10px;bottom:12px;z-index:4;background:#082b43df;border:1px solid var(--line);border-radius:11px;padding:8px 10px;font-size:11px;max-width:calc(100% - 150px);pointer-events:none}
 #stick{position:fixed;left:18px;bottom:25px;width:112px;height:112px;border-radius:50%;background:#082b4388;border:2px solid #ffffff88;z-index:6;touch-action:none}
 #knob{position:absolute;width:44px;height:44px;left:32px;top:32px;border-radius:50%;background:#f3fbff;border:2px solid #fff;box-shadow:0 2px 8px #001a2a66}
@@ -24,13 +24,13 @@ button{border:1px solid #c5ecff88;background:#092b45eF;color:white;border-radius
 #dialog input{width:100%;padding:10px;border-radius:9px;border:1px solid #a8d9ee}
 #dialog button{margin-top:8px;margin-right:5px}
 #toast{display:none;position:fixed;top:105px;left:50%;transform:translateX(-50%);z-index:12;background:#082b43f5;padding:9px 13px;border-radius:12px;font-size:12px}
-#mini{position:fixed;right:10px;bottom:12px;width:104px;height:80px;border:2px solid #e4f8ff;border-radius:10px;background:#063b58cc;z-index:3;opacity:.9}
+#mini{position:fixed;right:10px;bottom:12px;width:130px;height:100px;border:2px solid #e4f8ff;border-radius:10px;background:#063b58cc;z-index:3;opacity:.94}
 @media(min-width:700px){#stick{width:130px;height:130px}#knob{left:40px;top:40px}#help{max-width:360px}}
 </style>
 </head>
 <body>
 <canvas id="world"></canvas>
-<div id="hud"><div class="pill" id="status">EARTHVERSE · Starting island…</div><div class="pill">2D ISLAND</div></div>
+<div id="hud"><div class="pill" id="status">EARTHVERSE · Loading Massive Island…</div><div class="pill">MASSIVE ISLAND</div></div>
 <div id="buttons">
 <button id="save">SAVE WORLD</button>
 <button id="talk">NEAREST CITIZEN</button>
@@ -39,7 +39,7 @@ button{border:1px solid #c5ecff88;background:#092b45eF;color:white;border-radius
 </div>
 <div id="help">DRAG TO EXPLORE · JOYSTICK TO MOVE · TAP A CITIZEN TO TALK</div>
 <div id="stick"><div id="knob"></div></div>
-<canvas id="mini" width="208" height="160"></canvas>
+<canvas id="mini" width="260" height="200"></canvas>
 <div id="dialog"><strong id="person"></strong><p id="reply"></p><input id="message" maxlength="90" placeholder="Say hello…"><button id="send">SEND</button><button id="close">CLOSE</button></div>
 <div id="toast"></div>
 <script>
@@ -51,132 +51,133 @@ const status=document.getElementById('status');
 let W=innerWidth,H=innerHeight,dpr=Math.min(devicePixelRatio||1,1.5);
 function resize(){W=innerWidth;H=innerHeight;canvas.width=Math.round(W*dpr);canvas.height=Math.round(H*dpr);ctx.setTransform(dpr,0,0,dpr,0,0);draw();}
 addEventListener('resize',resize);
-const map={w:1500,h:1050};
-let cam={x:map.w/2,y:map.h/2,zoom:Math.min(W/1000,H/700)*.92};
-cam.zoom=Math.max(.42,Math.min(.9,cam.zoom));
+const map={w:1800,h:1250};
+let cam={x:900,y:625,zoom:Math.min(W/1100,H/760)*.9};
+cam.zoom=Math.max(.36,Math.min(.82,cam.zoom));
 const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
 const rnd=(a,b)=>a+Math.random()*(b-a);
 const pick=a=>a[Math.floor(Math.random()*a.length)];
-
-// Fixed, seeded scenery: generated once and reused on every frame.
-// This prevents trees from changing position/size and looking like they rotate.
-function seededRandom(seed){
- let s=seed>>>0;
- return function(){
-  s=(s*1664525+1013904223)>>>0;
-  return s/4294967296;
- };
-}
-const treeRandom=seededRandom(20261113);
-const treeRnd=(a,b)=>a+treeRandom()*(b-a);
+function seededRandom(seed){let s=seed>>>0;return()=>{s=(s*1664525+1013904223)>>>0;return s/4294967296;};}
+const rand=seededRandom(20261113);
+const treeRnd=(a,b)=>a+rand()*(b-a);
 const trees=[];
-for(let i=0;i<115;i++){
- const x=treeRnd(390,930),y=treeRnd(210,465);
- if(((x-660)/300)**2+((y-330)/155)**2<1){
-  trees.push({x,y,s:treeRnd(.8,1.45)});
- }
+for(let i=0;i<260;i++){
+ const x=treeRnd(260,1510),y=treeRnd(240,1050);
+ const jungle=((x-760)/330)**2+((y-545)/235)**2<1;
+ const south=(x<590&&y>760)||(x>1150&&y>790);
+ const east=(x>1320&&y<680);
+ if((jungle||south||east)&&rand()>.16)trees.push({x,y,s:treeRnd(.65,1.5)});
 }
-for(let i=0;i<25;i++){
- let x,y,attempts=0;
- do{
-  x=treeRnd(180,1320);y=treeRnd(170,900);attempts++;
- }while(((x-750)/590)**2+((y-525)/390)**2>.78&&attempts<100);
- if((x<450&&y>600)||(x>1050&&y>600)){
-  trees.push({x,y,s:treeRnd(.65,1.05)});
- }
-}
-
 let day=1,minute=8*60,elapsed=0,selected=null,toastTimer=0;
 const names=['Asha','Mira','Arun','Dev','Nila','Kavin','Ira','Ravi','Tara','Noah','Meena','Adhi','Sana','Vikram','Anu','Hari','Diya','Surya','Maya','Rohan','Priya','Ajay','Kavi','Naveen','Latha','Ishan','Keerthi','Manu','Riya','Bala','Sanjay','Divya','Gokul','Yazhini','Mohan','Aditi','Pranav','Sita','Vijay','Nithya','Rahul','Pooja','Arav','Janani','Dinesh','Kiran','Swetha','Varun','Anjali','Suresh'];
 const jobs=['Farmer','Shopkeeper','Fisher','Builder','Teacher','Medic','Guard','Cook','Carpenter','Guide'];
 const traits=['Friendly','Curious','Quiet','Ambitious','Helpful'];
-const citizens=names.map((name,i)=>({id:i+1,name,age:18+(i*7)%48,job:jobs[i%jobs.length],trait:traits[i%traits.length],money:250+(i*73)%900,hunger:20+(i*11)%45,energy:70+(i*3)%30,happy:60+(i*5)%35,activity:'working',x:0,y:0,homeX:0,homeY:0,goal:'Live a good day',memories:[],friends:[]}));
-// Stable citizen homes: the same citizens keep the same home positions after reload.
-function citizenRandom(seed){let s=seed>>>0;return()=>{s=(s*1664525+1013904223)>>>0;return s/4294967296;};}
-const citizenRand=citizenRandom(20261114);
-function islandPoint(i){
- const a=i*2.39996, r=.18+citizenRand()*.52;
- return {x:750+Math.cos(a)*r*520,y:525+Math.sin(a)*r*350};
-}
-citizens.forEach((c,i)=>{
- const p=islandPoint(i);c.x=c.homeX=p.x;c.y=c.homeY=p.y;
- c.targetX=p.x;c.targetY=p.y;c.nextDecision=0;c.walking=false;
+const zones=[
+ {x:500,y:900,rx:145,ry:95},{x:820,y:900,rx:170,ry:100},
+ {x:760,y:520,rx:210,ry:150},{x:1040,y:300,rx:170,ry:90},
+ {x:1320,y:500,rx:150,ry:110},{x:1440,y:830,rx:150,ry:100},
+ {x:1120,y:1010,rx:180,ry:65},{x:650,y:310,rx:130,ry:80}
+];
+const citizens=names.map((name,i)=>{
+ const z=zones[i%zones.length],a=i*2.39996,r=.25+(i%5)*.13;
+ const x=z.x+Math.cos(a)*z.rx*r,y=z.y+Math.sin(a)*z.ry*r;
+ return{id:i+1,name,age:18+(i*7)%48,job:jobs[i%jobs.length],trait:traits[i%traits.length],money:250+(i*73)%900,hunger:20+(i*11)%45,energy:70+(i*3)%30,happy:60+(i*5)%35,activity:'working',x,y,homeX:x,homeY:y,goal:'Live a good day',memories:[],friends:[],targetX:x,targetY:y,nextDecision:0,walking:false};
 });
-const player={x:750,y:710,speed:190};
+const player={x:820,y:920,speed:190};
 let keys={},stick={x:0,y:0},stickId=null,drag=null,lastT=performance.now();
 function hour(){return Math.floor(minute/60);}
-function schedule(c){const h=hour();if(h<6||h>=22)c.activity='sleeping';else if(h<8)c.activity='commuting';else if(h<12||h<16)c.activity='working';else if(h<17)c.activity='eating';else if(h<20)c.activity='socializing';else c.activity='relaxing';
-if(c.hunger>85)c.activity='eating';if(c.energy<15)c.activity='sleeping';
-const goals={sleeping:'Rest and recover',commuting:'Travel to work',working:'Earn a living',eating:'Find food',socializing:'Meet neighbours',relaxing:'Enjoy island life'};c.goal=goals[c.activity];}
-function save(){const data={day,minute,citizens:citizens.map(({x,y,homeX,homeY,...c})=>({...c,x,y,homeX,homeY})),player};try{localStorage.setItem('earthverse_island_v1',JSON.stringify(data));toast('World saved on this device.');}catch(e){toast('Save unavailable in this browser.');}}
-function load(){try{const d=JSON.parse(localStorage.getItem('earthverse_island_v1')||'null');if(!d)return;day=d.day||1;minute=d.minute||480;if(d.player)Object.assign(player,d.player);if(Array.isArray(d.citizens))d.citizens.forEach(s=>{const c=citizens[s.id-1];if(c)Object.assign(c,s);});}catch(e){}}
+function schedule(c){const h=hour();if(h<6||h>=22)c.activity='sleeping';else if(h<8)c.activity='commuting';else if(h<12||h<16)c.activity='working';else if(h<17)c.activity='eating';else if(h<20)c.activity='socializing';else c.activity='relaxing';if(c.hunger>85)c.activity='eating';if(c.energy<15)c.activity='sleeping';const goals={sleeping:'Rest and recover',commuting:'Travel to work',working:'Earn a living',eating:'Find food',socializing:'Meet neighbours',relaxing:'Enjoy island life'};c.goal=goals[c.activity];}
+function save(){const data={day,minute,citizens,player};try{localStorage.setItem('earthverse_massive_island_v2',JSON.stringify(data));toast('Massive Island saved on this device.');}catch(e){toast('Save unavailable in this browser.');}}
+function load(){try{const d=JSON.parse(localStorage.getItem('earthverse_massive_island_v2')||'null');if(!d)return;day=d.day||1;minute=d.minute||480;if(d.player)Object.assign(player,d.player);if(Array.isArray(d.citizens))d.citizens.forEach(s=>{const c=citizens[s.id-1];if(c)Object.assign(c,s);});}catch(e){}}
 load();
-citizens.forEach(c=>{
- if(!Number.isFinite(c.homeX)||!Number.isFinite(c.homeY)){c.homeX=c.x;c.homeY=c.y;}
- if(!Number.isFinite(c.targetX)||!Number.isFinite(c.targetY)){c.targetX=c.x;c.targetY=c.y;}
- c.nextDecision=0;c.walking=false;
-});
+citizens.forEach(c=>{if(!Number.isFinite(c.homeX)){c.homeX=c.x;c.homeY=c.y;}if(!Number.isFinite(c.targetX)){c.targetX=c.x;c.targetY=c.y;}});
 function toast(s){const el=document.getElementById('toast');el.textContent=s;el.style.display='block';clearTimeout(toastTimer);toastTimer=setTimeout(()=>el.style.display='none',2200);}
 function path(points,fill,stroke=null,lw=2){ctx.beginPath();points.forEach((p,i)=>i?ctx.lineTo(p[0],p[1]):ctx.moveTo(p[0],p[1]));ctx.closePath();ctx.fillStyle=fill;ctx.fill();if(stroke){ctx.strokeStyle=stroke;ctx.lineWidth=lw;ctx.stroke();}}
 function ellipse(x,y,rx,ry,color){ctx.beginPath();ctx.ellipse(x,y,rx,ry,0,0,Math.PI*2);ctx.fillStyle=color;ctx.fill();}
-function tree(x,y,s=1){ellipse(x,y+13*s,17*s,7*s,'#7b542e');ellipse(x,y,19*s,15*s,'#176b39');ellipse(x-10*s,y-8*s,14*s,12*s,'#268747');ellipse(x+10*s,y-9*s,14*s,12*s,'#329b4d');ellipse(x,y-15*s,11*s,10*s,'#50ad4e');}
-function house(x,y,s=1,color='#c68b4e'){ctx.fillStyle='#80502e';ctx.fillRect(x-17*s,y-7*s,34*s,27*s);path([[x-22*s,y-7*s],[x,y-25*s],[x+22*s,y-7*s]],'#9a4e32','#66351f',2);ctx.fillStyle='#f4d8a0';ctx.fillRect(x-5*s,y+3*s,10*s,17*s);ctx.fillStyle='#b8e5ed';ctx.fillRect(x+7*s,y-2*s,6*s,7*s);}
+function tree(x,y,s=1){ellipse(x,y+13*s,17*s,7*s,'#76502e');ellipse(x,y,19*s,15*s,'#145d35');ellipse(x-10*s,y-8*s,14*s,12*s,'#247b42');ellipse(x+10*s,y-9*s,14*s,12*s,'#32934c');ellipse(x,y-15*s,11*s,10*s,'#50ad4e');}
+function house(x,y,s=1,color='#c68b4e'){ctx.fillStyle='#80502e';ctx.fillRect(x-19*s,y-8*s,38*s,30*s);path([[x-25*s,y-8*s],[x,y-31*s],[x+25*s,y-8*s]],color,'#66351f',3);ctx.fillStyle='#f4d8a0';ctx.fillRect(x-6*s,y+4*s,12*s,18*s);ctx.fillStyle='#b8e5ed';ctx.fillRect(x+9*s,y-3*s,7*s,8*s);}
+function label(t,x,y,size=25){ctx.textAlign='center';ctx.lineWidth=5;ctx.strokeStyle='#193b35';ctx.fillStyle='#fff';ctx.font=`900 ${size}px system-ui`;ctx.strokeText(t,x,y);ctx.fillText(t,x,y);}
+function road(points,width=25){ctx.beginPath();points.forEach((p,i)=>i?ctx.lineTo(p[0],p[1]):ctx.moveTo(p[0],p[1]));ctx.lineCap='round';ctx.lineJoin='round';ctx.strokeStyle='#9d7950';ctx.lineWidth=width+8;ctx.stroke();ctx.strokeStyle='#dfbd83';ctx.lineWidth=width;ctx.stroke();}
 function drawMap(){
  ctx.fillStyle='#087ca5';ctx.fillRect(0,0,map.w,map.h);
- // ocean wave marks
- for(let i=0;i<90;i++){const x=(i*173)%map.w,y=(i*97)%map.h;ctx.strokeStyle='#66d7e4aa';ctx.lineWidth=3;ctx.beginPath();ctx.arc(x,y,7+(i%5)*3,.2,2.5);ctx.stroke();}
- // island sand and land silhouettes
- ctx.beginPath();ctx.ellipse(750,525,625,440,-.08,0,Math.PI*2);ctx.fillStyle='#eac27a';ctx.fill();
- ctx.beginPath();ctx.ellipse(750,512,594,409,-.08,0,Math.PI*2);ctx.fillStyle='#83c95a';ctx.fill();
- ctx.beginPath();ctx.ellipse(750,510,574,389,-.08,0,Math.PI*2);ctx.strokeStyle='#f9e4ad';ctx.lineWidth=12;ctx.stroke();
- // central hill
- path([[490,290],[590,175],[735,120],[865,160],[980,270],[900,355],[680,365]],'#62ad43','#438c38',5);
- path([[610,215],[690,142],[780,130],[855,185],[790,242],[680,250]],'#8bce58');
- // Fixed trees: positions and scales never change between frames.
- for(const t of trees)tree(t.x,t.y,t.s);
- // paths
- ctx.lineCap='round';ctx.lineJoin='round';ctx.strokeStyle='#d6ad69';ctx.lineWidth=31;ctx.beginPath();ctx.moveTo(420,405);ctx.bezierCurveTo(510,480,580,480,700,555);ctx.bezierCurveTo(790,620,880,625,1050,750);ctx.stroke();
- ctx.strokeStyle='#edcf91';ctx.lineWidth=22;ctx.stroke();
- ctx.beginPath();ctx.moveTo(700,555);ctx.bezierCurveTo(690,470,790,425,930,390);ctx.strokeStyle='#d6ad69';ctx.lineWidth=24;ctx.stroke();ctx.strokeStyle='#edcf91';ctx.lineWidth=16;ctx.stroke();
- // Cove water + dock + boats
- ellipse(365,700,105,65,'#22bfd0');ellipse(365,700,78,44,'#45d5df');
- ctx.fillStyle='#986239';ctx.fillRect(285,685,130,13);for(let i=0;i<6;i++)ctx.fillRect(298+i*20,677,5,29);
- path([[280,655],[330,643],[360,661],[330,679]],'#80512e','#4c3825',3);
- // waterfall pool
- ellipse(1010,490,95,58,'#24b8ca');ellipse(1010,490,66,39,'#61dce1');
- ctx.fillStyle='#b9e9e6';ctx.fillRect(990,390,36,70);ctx.fillStyle='#50c9d7';ctx.fillRect(1000,398,18,65);
- // ruins
- ctx.fillStyle='#a9a58a';ctx.fillRect(1070,320,74,65);ctx.fillRect(1083,292,48,28);ctx.fillRect(1090,275,34,18);
- for(let i=0;i<4;i++)ctx.fillRect(1070+i*20,310,7,13);
- // village houses
- house(770,635,1.05);house(865,655,.95,'#d0a15a');house(920,735,1.1);house(780,755,.9);house(680,665,.85);
- // Scattered trees are included in the same fixed trees list above.
- // labels
- ctx.textAlign='center';ctx.lineWidth=5;ctx.strokeStyle='#254a29';ctx.fillStyle='#fff';ctx.font='bold 26px system-ui';
- [['THE JUNGLE',650,315],['RUINS',1115,410],['VILLAGE',835,590],['COVE',440,625]].forEach(([t,x,y])=>{ctx.strokeText(t,x,y);ctx.fillText(t,x,y);});
+ for(let i=0;i<120;i++){const x=(i*173)%map.w,y=(i*97)%map.h;ctx.strokeStyle='#66d7e477';ctx.lineWidth=3;ctx.beginPath();ctx.arc(x,y,8+(i%5)*3,.2,2.5);ctx.stroke();}
+ // Crescent-like island, beach rim and varied coves
+ ctx.beginPath();ctx.moveTo(185,710);ctx.bezierCurveTo(145,480,285,245,535,185);ctx.bezierCurveTo(760,100,1020,125,1190,205);ctx.bezierCurveTo(1430,180,1640,370,1640,620);ctx.bezierCurveTo(1690,840,1500,1085,1230,1110);ctx.bezierCurveTo(1010,1190,740,1135,550,1080);ctx.bezierCurveTo(310,1040,150,900,185,710);ctx.closePath();ctx.fillStyle='#eac27a';ctx.fill();
+ ctx.beginPath();ctx.moveTo(210,700);ctx.bezierCurveTo(180,490,315,275,550,220);ctx.bezierCurveTo(770,145,1010,165,1185,245);ctx.bezierCurveTo(1410,215,1600,395,1605,625);ctx.bezierCurveTo(1640,825,1470,1045,1210,1070);ctx.bezierCurveTo(1000,1140,760,1090,570,1040);ctx.bezierCurveTo(345,1000,205,875,210,700);ctx.closePath();ctx.fillStyle='#78bd55';ctx.fill();
+ ctx.strokeStyle='#f8e2ad';ctx.lineWidth=13;ctx.stroke();
+ // Highlands and snow caps
+ path([[750,360],[815,205],[930,135],[1045,205],[1150,345],[1080,425],[900,430]],'#658c52','#426c43',5);
+ path([[815,210],[875,150],[930,135],[990,165],[950,215],[900,205]],'#e5eee2');
+ path([[975,205],[1030,180],[1085,235],[1050,270],[1010,245]],'#dce9e2');
+ // mountain ridges
+ path([[790,330],[870,235],[940,270],[1010,220],[1115,350],[1050,405],[900,390]],'#789b5c');
+ // Jungle canopy mass
+ for(let i=0;i<trees.length;i++){const t=trees[i];tree(t.x,t.y,t.s);}
+ // River from mountain lake to southern/eastern coast
+ ctx.beginPath();ctx.moveTo(1000,300);ctx.bezierCurveTo(1080,390,970,465,1035,545);ctx.bezierCurveTo(1100,630,1000,700,1090,780);ctx.bezierCurveTo(1160,855,1080,960,1160,1090);ctx.lineCap='round';ctx.strokeStyle='#176d83';ctx.lineWidth=65;ctx.stroke();ctx.strokeStyle='#36bfd0';ctx.lineWidth=48;ctx.stroke();
+ ellipse(1000,300,88,47,'#29b9cb');ellipse(1000,300,62,31,'#62d9df');
+ // waterfalls
+ ctx.fillStyle='#d4f4ee';ctx.fillRect(1010,350,28,88);ctx.fillStyle='#43c7d3';ctx.fillRect(1017,355,14,82);
+ // road network
+ road([[360,470],[500,570],[680,680],[820,790],[1030,850],[1260,850],[1450,760]],28);
+ road([[820,790],[790,620],[770,500],[850,390],[950,330]],22);
+ road([[1030,850],[1130,700],[1280,590],[1410,470]],22);
+ road([[820,790],[700,900],[560,965],[430,920]],20);
+ road([[1030,850],[1120,980],[1260,1030],[1400,1010]],20);
+ // Lighthouse offshore rock and beacon
+ ellipse(235,350,72,55,'#7e7867');ellipse(235,350,58,42,'#b9a98a');
+ ctx.fillStyle='#eee6d2';ctx.fillRect(220,245,30,105);ctx.fillStyle='#c64c3b';ctx.fillRect(220,270,30,19);ctx.fillRect(220,310,30,18);ctx.fillRect(215,238,40,13);ctx.fillStyle='#a9322c';ctx.fillRect(216,228,38,12);ellipse(235,224,18,8,'#e85b45');
+ // western fishing cove, piers and boats
+ ellipse(390,900,115,70,'#24bfd0');ellipse(390,900,82,45,'#55d9df');
+ ctx.fillStyle='#80512e';ctx.fillRect(300,900,150,12);for(let i=0;i<7;i++)ctx.fillRect(310+i*21,891,5,30);
+ for(let i=0;i<4;i++){ctx.save();ctx.translate(330+i*38,940+(i%2)*18);ctx.rotate(-.2);path([[-18,0],[-9,-8],[17,-5],[22,0],[10,8],[-13,7]],i%2?'#f4e3bd':'#b7d9e4','#614d38',2);ctx.restore();}
+ // Village huts, market and campfire
+ house(720,855,1.05,'#b98249');house(825,890,.95,'#d2a15a');house(900,820,.9,'#a96e3e');house(690,970,.9,'#c99558');house(940,970,1,'#bd884d');
+ ellipse(830,945,13,8,'#e9a43a');ellipse(830,938,6,11,'#ffdf76');
+ // Ancient ruins / stepped temple to the east
+ path([[1330,390],[1445,390],[1500,485],[1385,485]],'#a69a7d','#716b59',3);
+ ctx.fillStyle='#b9ad8e';ctx.fillRect(1350,345,105,48);ctx.fillRect(1365,315,75,30);ctx.fillRect(1380,285,45,30);
+ for(let i=0;i<5;i++){ctx.fillStyle=i%2?'#8f876f':'#c2b493';ctx.fillRect(1325+i*31,470-i*8,28,12);}
+ // Industrial harbor, hangars, containers and cranes
+ ctx.fillStyle='#77796e';ctx.fillRect(1320,790,255,155);
+ ctx.fillStyle='#9d9b89';ctx.beginPath();ctx.moveTo(1325,790);ctx.quadraticCurveTo(1445,665,1565,790);ctx.fill();
+ ctx.fillStyle='#4f5a5b';ctx.fillRect(1350,805,190,92);
+ for(let i=0;i<6;i++){ctx.fillStyle=['#c45c43','#477c68','#d19b45'][i%3];ctx.fillRect(1235+(i%3)*52,905+Math.floor(i/3)*38,45,32);}
+ ctx.strokeStyle='#4b514b';ctx.lineWidth=9;ctx.beginPath();ctx.moveTo(1580,720);ctx.lineTo(1580,880);ctx.moveTo(1540,720);ctx.lineTo(1620,720);ctx.lineTo(1595,755);ctx.stroke();
+ // Airstrip and hangars in south-east
+ ctx.save();ctx.translate(1120,1015);ctx.rotate(-.08);ctx.fillStyle='#555d60';ctx.fillRect(-120,-22,260,45);ctx.strokeStyle='#e7e1c9';ctx.lineWidth=3;ctx.setLineDash([18,13]);ctx.beginPath();ctx.moveTo(-110,0);ctx.lineTo(130,0);ctx.stroke();ctx.setLineDash([]);ctx.restore();
+ ctx.fillStyle='#9d8d70';ctx.fillRect(1000,940,55,38);ctx.fillRect(1065,940,55,38);
+ // scattered palms around beaches
+ for(let i=0;i<22;i++){const x=treeRnd(280,1550),y=treeRnd(760,1060);if((x<580||x>1250)&&y>790)tree(x,y,.75);}
+ // Area names
+ label('SKY PEAK',955,185,27);label('EMERALD JUNGLE',690,535,27);label('ANCIENT RUINS',1400,270,25);
+ label("FISHERMAN'S COVE",390,815,22);label('VILLAGE',820,770,26);label('HARBOR CITY',1450,990,23);label('AIRSTRIP',1115,1090,21);
+ label('LIGHTHOUSE',235,190,18);
 }
-function drawPerson(x,y,label,color,isPlayer=false){ellipse(x,y+8,12,5,'#24422c88');ctx.fillStyle=color;ctx.beginPath();ctx.arc(x,y-7,8,0,Math.PI*2);ctx.fill();ctx.fillStyle='#f1c49a';ctx.beginPath();ctx.arc(x,y-18,6,0,Math.PI*2);ctx.fill();ctx.strokeStyle='#3b2b22';ctx.lineWidth=2;ctx.stroke();ctx.textAlign='center';ctx.font='bold 12px system-ui';ctx.lineWidth=3;ctx.strokeStyle='#183b2d';ctx.strokeText(label,x,y-31);ctx.fillStyle='white';ctx.fillText(label,x,y-31);if(isPlayer){ctx.strokeStyle='#fff';ctx.lineWidth=2;ctx.beginPath();ctx.arc(x,y-8,15,0,Math.PI*2);ctx.stroke();}}
-function worldToScreen(x,y){return{x:(x-cam.x)*cam.zoom+W/2,y:(y-cam.y)*cam.zoom+H/2};}
+function drawPerson(x,y,labelText,color,isPlayer=false){ellipse(x,y+8,12,5,'#24422c88');ctx.fillStyle=color;ctx.beginPath();ctx.arc(x,y-7,8,0,Math.PI*2);ctx.fill();ctx.fillStyle='#f1c49a';ctx.beginPath();ctx.arc(x,y-18,6,0,Math.PI*2);ctx.fill();ctx.strokeStyle='#3b2b22';ctx.lineWidth=2;ctx.stroke();ctx.textAlign='center';ctx.font='bold 12px system-ui';ctx.lineWidth=3;ctx.strokeStyle='#183b2d';ctx.strokeText(labelText,x,y-31);ctx.fillStyle='white';ctx.fillText(labelText,x,y-31);if(isPlayer){ctx.strokeStyle='#fff';ctx.lineWidth=2;ctx.beginPath();ctx.arc(x,y-8,15,0,Math.PI*2);ctx.stroke();}}
 function screenToWorld(x,y){return{x:(x-W/2)/cam.zoom+cam.x,y:(y-H/2)/cam.zoom+cam.y};}
 function draw(){
  if(!ctx)return;ctx.setTransform(dpr,0,0,dpr,0,0);ctx.fillStyle='#087ca5';ctx.fillRect(0,0,W,H);
  ctx.save();ctx.translate(W/2-cam.x*cam.zoom,H/2-cam.y*cam.zoom);ctx.scale(cam.zoom,cam.zoom);
  drawMap();
  citizens.forEach((c,i)=>drawPerson(c.x,c.y,c.name,['#a64a37','#3f80a8','#dc9d36','#527d3e','#8b5ca7'][i%5]));
- drawPerson(player.x,player.y,'YOU','#e4f4ff',true);
- ctx.restore();
- drawMini();
+ drawPerson(player.x,player.y,'YOU','#e4f4ff',true);ctx.restore();drawMini();
 }
-function drawMini(){mx.clearRect(0,0,208,160);mx.fillStyle='#087ca5';mx.fillRect(0,0,208,160);mx.save();mx.translate(104,80);mx.scale(.13,.13);mx.translate(-750,-525);mx.beginPath();mx.ellipse(750,525,625,440,-.08,0,Math.PI*2);mx.fillStyle='#83c95a';mx.fill();mx.strokeStyle='#f2d69b';mx.lineWidth=35;mx.stroke();mx.fillStyle='#fff';citizens.forEach(c=>{mx.fillRect(c.x-8,c.y-8,16,16)});mx.fillStyle='#e34b39';mx.fillRect(player.x-12,player.y-12,24,24);mx.restore();}
+function drawMini(){
+ mx.clearRect(0,0,260,200);mx.fillStyle='#087ca5';mx.fillRect(0,0,260,200);
+ mx.save();mx.translate(130,100);mx.scale(.125,.125);mx.translate(-900,-625);
+ mx.beginPath();mx.moveTo(185,710);mx.bezierCurveTo(145,480,285,245,535,185);mx.bezierCurveTo(760,100,1020,125,1190,205);mx.bezierCurveTo(1430,180,1640,370,1640,620);mx.bezierCurveTo(1690,840,1500,1085,1230,1110);mx.bezierCurveTo(1010,1190,740,1135,550,1080);mx.bezierCurveTo(310,1040,150,900,185,710);mx.fillStyle='#78bd55';mx.fill();mx.strokeStyle='#f2d69b';mx.lineWidth=45;mx.stroke();
+ mx.fillStyle='#fff';citizens.forEach(c=>mx.fillRect(c.x-8,c.y-8,16,16));mx.fillStyle='#e34b39';mx.fillRect(player.x-13,player.y-13,26,26);mx.restore();
+}
 function nearest(){let b=null,d=Infinity;for(const c of citizens){const n=Math.hypot(c.x-player.x,c.y-player.y);if(n<d){d=n;b=c;}}return d<90?b:null;}
-function talk(c,msg){const m=msg.toLowerCase();let r;if(/hello|hi|hey|வணக்கம்/.test(m))r=`Hello! I'm ${c.name}. Welcome to our island.`;else if(/job|work/.test(m))r=`I work as a ${c.job}. Today I'm ${c.activity}.`;else if(/name/.test(m))r=`My name is ${c.name}. I'm ${c.trait.toLowerCase()} by nature.`;else if(/family|friend/.test(m))r='My neighbours are important to me. We help each other.';else if(/where|place/.test(m))r='I live on this island, near the village and jungle.';else r=pick([`That's interesting. What do you think?`,`I need to ${c.goal.toLowerCase()}.`,`It's a peaceful day on our island.`]);c.memories.push({day,text:`You said: ${msg}`});if(c.memories.length>10)c.memories.shift();return r;}
+function talk(c,msg){const m=msg.toLowerCase();let r;if(/hello|hi|hey|வணக்கம்/.test(m))r=`Hello! I'm ${c.name}. Welcome to our island.`;else if(/job|work/.test(m))r=`I work as a ${c.job}. Today I'm ${c.activity}.`;else if(/name/.test(m))r=`My name is ${c.name}. I'm ${c.trait.toLowerCase()} by nature.`;else if(/family|friend/.test(m))r='My neighbours are important to me. We help each other.';else if(/where|place/.test(m))r='I live on this island. I like visiting the village, jungle and coast.';else r=pick([`That's interesting. What do you think?`,`I need to ${c.goal.toLowerCase()}.`,`It's a peaceful day on our island.`]);c.memories.push({day,text:`You said: ${msg}`});if(c.memories.length>10)c.memories.shift();return r;}
 function openCitizen(c){selected=c;document.getElementById('person').textContent=`${c.name} · ${c.age} · ${c.job}`;document.getElementById('reply').textContent=`${c.trait} citizen · ${c.activity} · Happiness ${Math.round(c.happy)}%`;document.getElementById('dialog').style.display='block';}
 document.getElementById('send').onclick=()=>{if(!selected)return;const input=document.getElementById('message'),msg=input.value.trim()||'hello';document.getElementById('reply').textContent=selected.name+': '+talk(selected,msg);input.value='';};
 document.getElementById('close').onclick=()=>document.getElementById('dialog').style.display='none';
 document.getElementById('talk').onclick=()=>{const c=nearest();if(c)openCitizen(c);else toast('Move closer to a citizen first.');};
 document.getElementById('save').onclick=save;
-document.getElementById('zoomIn').onclick=()=>{cam.zoom=clamp(cam.zoom*1.15,.35,1.6);draw();};
-document.getElementById('zoomOut').onclick=()=>{cam.zoom=clamp(cam.zoom/1.15,.35,1.6);draw();};
+document.getElementById('zoomIn').onclick=()=>{cam.zoom=clamp(cam.zoom*1.15,.3,1.6);draw();};
+document.getElementById('zoomOut').onclick=()=>{cam.zoom=clamp(cam.zoom/1.15,.3,1.6);draw();};
 addEventListener('keydown',e=>keys[e.code]=true);addEventListener('keyup',e=>keys[e.code]=false);
 const stickEl=document.getElementById('stick'),knob=document.getElementById('knob');
 function stickMove(e){const r=stickEl.getBoundingClientRect(),dx=e.clientX-r.left-r.width/2,dy=e.clientY-r.top-r.height/2,max=r.width*.34,l=Math.hypot(dx,dy)||1,f=Math.min(1,max/l);stick.x=dx*f/max;stick.y=dy*f/max;knob.style.transform=`translate(${stick.x*max}px,${stick.y*max}px)`;}
@@ -186,61 +187,26 @@ function stickEnd(e){if(e.pointerId!==stickId)return;stickId=null;stick.x=stick.
 stickEl.addEventListener('pointerup',stickEnd);stickEl.addEventListener('pointercancel',stickEnd);
 canvas.addEventListener('pointerdown',e=>{const p=screenToWorld(e.clientX,e.clientY);let hit=null,dist=35/cam.zoom;for(const c of citizens){const d=Math.hypot(c.x-p.x,c.y-p.y);if(d<dist){hit=c;dist=d;}}if(hit){openCitizen(hit);return;}drag={id:e.pointerId,x:e.clientX,y:e.clientY,camX:cam.x,camY:cam.y};canvas.setPointerCapture(e.pointerId);});
 canvas.addEventListener('pointermove',e=>{if(!drag||drag.id!==e.pointerId)return;cam.x=clamp(drag.camX-(e.clientX-drag.x)/cam.zoom,0,map.w);cam.y=clamp(drag.camY-(e.clientY-drag.y)/cam.zoom,0,map.h);draw();});
-canvas.addEventListener('pointerup',e=>{if(drag&&drag.id===e.pointerId)drag=null;});
-canvas.addEventListener('pointercancel',()=>drag=null);
+canvas.addEventListener('pointerup',e=>{if(drag&&drag.id===e.pointerId)drag=null;});canvas.addEventListener('pointercancel',()=>drag=null);
 function chooseCitizenDestination(c,i){
- if(c.activity==='sleeping'){
-  c.targetX=c.homeX;c.targetY=c.homeY;
- }else if(c.activity==='commuting'||c.activity==='working'){
-  const col=i%10,row=Math.floor(i/10);
-  c.targetX=600+col*48+(i%3)*5;
-  c.targetY=585+row*34+(i%4)*4;
- }else if(c.activity==='socializing'){
-  const angle=i*2.39996;
-  c.targetX=820+Math.cos(angle)*(65+(i%4)*12);
-  c.targetY=700+Math.sin(angle)*(45+(i%3)*10);
- }else if(c.activity==='eating'){
-  c.targetX=760+(i%8)*28;
-  c.targetY=755+(Math.floor(i/8)%4)*22;
- }else{
-  const angle=i*1.7+elapsed*.03;
-  c.targetX=c.homeX+Math.cos(angle)*(18+(i%4)*5);
-  c.targetY=c.homeY+Math.sin(angle)*(14+(i%3)*5);
- }
- c.targetX=clamp(c.targetX,170,1330);
- c.targetY=clamp(c.targetY,145,905);
- c.nextDecision=elapsed+5+(i%5)*1.2;
+ if(c.activity==='sleeping'){c.targetX=c.homeX;c.targetY=c.homeY;}
+ else if(c.activity==='commuting'||c.activity==='working'){const col=i%10,row=Math.floor(i/10);c.targetX=690+col*48+(i%3)*5;c.targetY=790+row*25+(i%4)*4;}
+ else if(c.activity==='socializing'){const angle=i*2.39996;c.targetX=820+Math.cos(angle)*(65+(i%4)*12);c.targetY=900+Math.sin(angle)*(45+(i%3)*10);}
+ else if(c.activity==='eating'){c.targetX=760+(i%8)*28;c.targetY=875+(Math.floor(i/8)%4)*22;}
+ else{const angle=i*1.7+elapsed*.03;c.targetX=c.homeX+Math.cos(angle)*(18+(i%4)*5);c.targetY=c.homeY+Math.sin(angle)*(14+(i%3)*5);}
+ c.targetX=clamp(c.targetX,210,1600);c.targetY=clamp(c.targetY,180,1120);c.nextDecision=elapsed+5+(i%5)*1.2;
 }
 function update(dt){
- elapsed+=dt;
- minute+=dt*3;
- if(minute>=1440){minute-=1440;day++;}
- const h=hour();
- const vx=(keys.ArrowRight||keys.KeyD?1:0)-(keys.ArrowLeft||keys.KeyA?1:0)+stick.x;
- const vy=(keys.ArrowDown||keys.KeyS?1:0)-(keys.ArrowUp||keys.KeyW?1:0)+stick.y;
- const len=Math.hypot(vx,vy)||1;
- player.x=clamp(player.x+vx/len*player.speed*dt,150,1350);
- player.y=clamp(player.y+vy/len*player.speed*dt,130,920);
- citizens.forEach((c,i)=>{
-  schedule(c);
-  if(elapsed>=c.nextDecision)chooseCitizenDestination(c,i);
-  const dx=c.targetX-c.x,dy=c.targetY-c.y,d=Math.hypot(dx,dy);
-  const speed=c.activity==='sleeping'?0:(c.activity==='commuting'?23:15);
-  const step=Math.min(d,speed*dt);
-  if(d>1){c.x+=dx/d*step;c.y+=dy/d*step;c.walking=speed>0;}
-  else{c.x=c.targetX;c.y=c.targetY;c.walking=false;}
-  c.hunger=clamp(c.hunger+dt*.18,0,100);
-  c.energy=clamp(c.energy+(c.activity==='sleeping'?dt*2.5:-dt*.45),0,100);
-  c.happy=clamp(c.happy+(c.activity==='socializing'?dt*.35:-dt*.025),0,100);
-  if(c.activity==='working')c.money+=dt*.3;
- });
- cam.x+=(player.x-cam.x)*Math.min(1,dt*1.6);
- cam.y+=(player.y-cam.y)*Math.min(1,dt*1.6);
+ elapsed+=dt;minute+=dt*3;if(minute>=1440){minute-=1440;day++;}
+ const h=hour(),vx=(keys.ArrowRight||keys.KeyD?1:0)-(keys.ArrowLeft||keys.KeyA?1:0)+stick.x,vy=(keys.ArrowDown||keys.KeyS?1:0)-(keys.ArrowUp||keys.KeyW?1:0)+stick.y,len=Math.hypot(vx,vy)||1;
+ player.x=clamp(player.x+vx/len*player.speed*dt,190,1650);player.y=clamp(player.y+vy/len*player.speed*dt,150,1150);
+ citizens.forEach((c,i)=>{schedule(c);if(elapsed>=c.nextDecision)chooseCitizenDestination(c,i);const dx=c.targetX-c.x,dy=c.targetY-c.y,d=Math.hypot(dx,dy),speed=c.activity==='sleeping'?0:(c.activity==='commuting'?23:15),step=Math.min(d,speed*dt);if(d>1){c.x+=dx/d*step;c.y+=dy/d*step;c.walking=speed>0;}else{c.x=c.targetX;c.y=c.targetY;c.walking=false;}c.hunger=clamp(c.hunger+dt*.18,0,100);c.energy=clamp(c.energy+(c.activity==='sleeping'?dt*2.5:-dt*.45),0,100);c.happy=clamp(c.happy+(c.activity==='socializing'?dt*.35:-dt*.025),0,100);if(c.activity==='working')c.money+=dt*.3;});
+ cam.x+=(player.x-cam.x)*Math.min(1,dt*1.6);cam.y+=(player.y-cam.y)*Math.min(1,dt*1.6);
  status.textContent=`EARTHVERSE · Day ${day} · ${String(h).padStart(2,'0')}:${String(Math.floor(minute%60)).padStart(2,'0')} · ${citizens.length} citizens`;
 }
 function loop(now){const dt=Math.min((now-lastT)/1000,.05);lastT=now;update(dt);draw();requestAnimationFrame(loop);}
 resize();requestAnimationFrame(loop);
-addEventListener('pagehide',()=>{try{localStorage.setItem('earthverse_island_v1',JSON.stringify({day,minute,citizens,player}));}catch(e){}});
+addEventListener('pagehide',()=>{try{localStorage.setItem('earthverse_massive_island_v2',JSON.stringify({day,minute,citizens,player}));}catch(e){}});
 })();
 </script>
 </body>
