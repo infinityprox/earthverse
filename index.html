@@ -57,6 +57,35 @@ cam.zoom=Math.max(.42,Math.min(.9,cam.zoom));
 const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
 const rnd=(a,b)=>a+Math.random()*(b-a);
 const pick=a=>a[Math.floor(Math.random()*a.length)];
+
+// Fixed, seeded scenery: generated once and reused on every frame.
+// This prevents trees from changing position/size and looking like they rotate.
+function seededRandom(seed){
+ let s=seed>>>0;
+ return function(){
+  s=(s*1664525+1013904223)>>>0;
+  return s/4294967296;
+ };
+}
+const treeRandom=seededRandom(20261113);
+const treeRnd=(a,b)=>a+treeRandom()*(b-a);
+const trees=[];
+for(let i=0;i<115;i++){
+ const x=treeRnd(390,930),y=treeRnd(210,465);
+ if(((x-660)/300)**2+((y-330)/155)**2<1){
+  trees.push({x,y,s:treeRnd(.8,1.45)});
+ }
+}
+for(let i=0;i<25;i++){
+ let x,y,attempts=0;
+ do{
+  x=treeRnd(180,1320);y=treeRnd(170,900);attempts++;
+ }while(((x-750)/590)**2+((y-525)/390)**2>.78&&attempts<100);
+ if((x<450&&y>600)||(x>1050&&y>600)){
+  trees.push({x,y,s:treeRnd(.65,1.05)});
+ }
+}
+
 let day=1,minute=8*60,elapsed=0,selected=null,toastTimer=0;
 const names=['Asha','Mira','Arun','Dev','Nila','Kavin','Ira','Ravi','Tara','Noah','Meena','Adhi','Sana','Vikram','Anu','Hari','Diya','Surya','Maya','Rohan','Priya','Ajay','Kavi','Naveen','Latha','Ishan','Keerthi','Manu','Riya','Bala','Sanjay','Divya','Gokul','Yazhini','Mohan','Aditi','Pranav','Sita','Vijay','Nithya','Rahul','Pooja','Arav','Janani','Dinesh','Kiran','Swetha','Varun','Anjali','Suresh'];
 const jobs=['Farmer','Shopkeeper','Fisher','Builder','Teacher','Medic','Guard','Cook','Carpenter','Guide'];
@@ -89,8 +118,8 @@ function drawMap(){
  // central hill
  path([[490,290],[590,175],[735,120],[865,160],[980,270],[900,355],[680,365]],'#62ad43','#438c38',5);
  path([[610,215],[690,142],[780,130],[855,185],[790,242],[680,250]],'#8bce58');
- // jungle mass
- for(let i=0;i<115;i++){const x=rnd(390,930),y=rnd(210,465);if(((x-660)/300)**2+((y-330)/155)**2<1)tree(x,y,rnd(.8,1.45));}
+ // Fixed jungle trees
+ for(const t of trees)tree(t.x,t.y,t.s);
  // paths
  ctx.lineCap='round';ctx.lineJoin='round';ctx.strokeStyle='#d6ad69';ctx.lineWidth=31;ctx.beginPath();ctx.moveTo(420,405);ctx.bezierCurveTo(510,480,580,480,700,555);ctx.bezierCurveTo(790,620,880,625,1050,750);ctx.stroke();
  ctx.strokeStyle='#edcf91';ctx.lineWidth=22;ctx.stroke();
@@ -107,8 +136,8 @@ function drawMap(){
  for(let i=0;i<4;i++)ctx.fillRect(1070+i*20,310,7,13);
  // village houses
  house(770,635,1.05);house(865,655,.95,'#d0a15a');house(920,735,1.1);house(780,755,.9);house(680,665,.85);
- // palms and scattered trees
- for(let i=0;i<25;i++){let x,y;do{x=rnd(180,1320);y=rnd(170,900);}while(((x-750)/590)**2+((y-525)/390)**2>.78);if((x<450&&y>600)||(x>1050&&y>600))tree(x,y,rnd(.65,1.05));}
+ // Fixed scattered trees
+ for(const t of trees.slice(0)){} // trees are drawn from the fixed list above
  // labels
  ctx.textAlign='center';ctx.lineWidth=5;ctx.strokeStyle='#254a29';ctx.fillStyle='#fff';ctx.font='bold 26px system-ui';
  [['THE JUNGLE',650,315],['RUINS',1115,410],['VILLAGE',835,590],['COVE',440,625]].forEach(([t,x,y])=>{ctx.strokeText(t,x,y);ctx.fillText(t,x,y);});
