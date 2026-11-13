@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
 <meta name="theme-color" content="#075b83">
-<title>EARTHVERSE — Massive Island</title>
+<title>EARTHVERSE — New World: Terra Nova</title>
 <style>
 :root{--panel:#082b43ef;--line:#bceaff66}
 *{box-sizing:border-box}
@@ -30,14 +30,14 @@ button{border:1px solid #c5ecff88;background:#092b45ef;color:white;border-radius
 </head>
 <body>
 <canvas id="world"></canvas>
-<div id="hud"><div class="pill" id="status">EARTHVERSE · Loading Massive Island…</div><div class="pill">MASSIVE ISLAND</div></div>
+<div id="hud"><div class="pill" id="status">EARTHVERSE · Discovering Terra Nova…</div><div class="pill">TERRA NOVA</div></div>
 <div id="buttons">
 <button id="save">SAVE WORLD</button>
 <button id="talk">NEAREST CITIZEN</button>
 <button id="zoomIn">ZOOM +</button>
 <button id="zoomOut">ZOOM −</button>
 </div>
-<div id="help">DRAG TO EXPLORE · JOYSTICK TO MOVE · TAP A CITIZEN TO TALK</div>
+<div id="help">EXPLORE TERRA NOVA · JOYSTICK TO MOVE · TAP A CITIZEN TO TALK</div>
 <div id="stick"><div id="knob"></div></div>
 <canvas id="mini" width="260" height="200"></canvas>
 <div id="dialog"><strong id="person"></strong><p id="reply"></p><input id="message" maxlength="90" placeholder="Say hello…"><button id="send">SEND</button><button id="close">CLOSE</button></div>
@@ -58,37 +58,37 @@ const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
 const rnd=(a,b)=>a+Math.random()*(b-a);
 const pick=a=>a[Math.floor(Math.random()*a.length)];
 function seededRandom(seed){let s=seed>>>0;return()=>{s=(s*1664525+1013904223)>>>0;return s/4294967296;};}
-const rand=seededRandom(20261113);
+const rand=seededRandom(20271113);
 const treeRnd=(a,b)=>a+rand()*(b-a);
 const trees=[];
-for(let i=0;i<260;i++){
- const x=treeRnd(260,1510),y=treeRnd(240,1050);
- const jungle=((x-760)/330)**2+((y-545)/235)**2<1;
- const south=(x<590&&y>760)||(x>1150&&y>790);
- const east=(x>1320&&y<680);
- if((jungle||south||east)&&rand()>.16)trees.push({x,y,s:treeRnd(.65,1.5)});
+for(let i=0;i<340;i++){
+ const x=treeRnd(230,1580),y=treeRnd(180,1080);
+ const forest=((x-850)/330)**2+((y-650)/270)**2<1;
+ const west=(x<620&&y>430&&y<900);
+ const east=(x>1190&&y>400&&y<850);
+ if((forest||west||east)&&rand()>.12)trees.push({x,y,s:treeRnd(.65,1.55)});
 }
 let day=1,minute=8*60,elapsed=0,selected=null,toastTimer=0;
 const names=['Asha','Mira','Arun','Dev','Nila','Kavin','Ira','Ravi','Tara','Noah','Meena','Adhi','Sana','Vikram','Anu','Hari','Diya','Surya','Maya','Rohan','Priya','Ajay','Kavi','Naveen','Latha','Ishan','Keerthi','Manu','Riya','Bala','Sanjay','Divya','Gokul','Yazhini','Mohan','Aditi','Pranav','Sita','Vijay','Nithya','Rahul','Pooja','Arav','Janani','Dinesh','Kiran','Swetha','Varun','Anjali','Suresh'];
 const jobs=['Farmer','Shopkeeper','Fisher','Builder','Teacher','Medic','Guard','Cook','Carpenter','Guide'];
 const traits=['Friendly','Curious','Quiet','Ambitious','Helpful'];
 const zones=[
- {x:500,y:900,rx:145,ry:95},{x:820,y:900,rx:170,ry:100},
- {x:760,y:520,rx:210,ry:150},{x:1040,y:300,rx:170,ry:90},
- {x:1320,y:500,rx:150,ry:110},{x:1440,y:830,rx:150,ry:100},
- {x:1120,y:1010,rx:180,ry:65},{x:650,y:310,rx:130,ry:80}
+ {x:430,y:780,rx:150,ry:95},{x:760,y:900,rx:170,ry:100},
+ {x:850,y:650,rx:230,ry:180},{x:1080,y:300,rx:180,ry:100},
+ {x:1370,y:560,rx:150,ry:120},{x:1450,y:880,rx:140,ry:90},
+ {x:1110,y:1020,rx:180,ry:65},{x:570,y:330,rx:140,ry:95}
 ];
 const citizens=names.map((name,i)=>{
  const z=zones[i%zones.length],a=i*2.39996,r=.25+(i%5)*.13;
  const x=z.x+Math.cos(a)*z.rx*r,y=z.y+Math.sin(a)*z.ry*r;
  return{id:i+1,name,age:18+(i*7)%48,job:jobs[i%jobs.length],trait:traits[i%traits.length],money:250+(i*73)%900,hunger:20+(i*11)%45,energy:70+(i*3)%30,happy:60+(i*5)%35,activity:'working',x,y,homeX:x,homeY:y,goal:'Live a good day',memories:[],friends:[],targetX:x,targetY:y,nextDecision:0,walking:false};
 });
-const player={x:820,y:920,speed:190};
+const player={x:900,y:820,speed:190};
 let keys={},stick={x:0,y:0},stickId=null,drag=null,lastT=performance.now();
 function hour(){return Math.floor(minute/60);}
 function schedule(c){const h=hour();if(h<6||h>=22)c.activity='sleeping';else if(h<8)c.activity='commuting';else if(h<12||h<16)c.activity='working';else if(h<17)c.activity='eating';else if(h<20)c.activity='socializing';else c.activity='relaxing';if(c.hunger>85)c.activity='eating';if(c.energy<15)c.activity='sleeping';const goals={sleeping:'Rest and recover',commuting:'Travel to work',working:'Earn a living',eating:'Find food',socializing:'Meet neighbours',relaxing:'Enjoy island life'};c.goal=goals[c.activity];}
-function save(){const data={day,minute,citizens,player};try{localStorage.setItem('earthverse_massive_island_v2',JSON.stringify(data));toast('Massive Island saved on this device.');}catch(e){toast('Save unavailable in this browser.');}}
-function load(){try{const d=JSON.parse(localStorage.getItem('earthverse_massive_island_v2')||'null');if(!d)return;day=d.day||1;minute=d.minute||480;if(d.player)Object.assign(player,d.player);if(Array.isArray(d.citizens))d.citizens.forEach(s=>{const c=citizens[s.id-1];if(c)Object.assign(c,s);});}catch(e){}}
+function save(){const data={day,minute,citizens,player};try{localStorage.setItem('earthverse_terra_nova_v1',JSON.stringify(data));toast('Terra Nova saved on this device.');}catch(e){toast('Save unavailable in this browser.');}}
+function load(){try{const d=JSON.parse(localStorage.getItem('earthverse_terra_nova_v1')||'null');if(!d)return;day=d.day||1;minute=d.minute||480;if(d.player)Object.assign(player,d.player);if(Array.isArray(d.citizens))d.citizens.forEach(s=>{const c=citizens[s.id-1];if(c)Object.assign(c,s);});}catch(e){}}
 load();
 citizens.forEach(c=>{if(!Number.isFinite(c.homeX)){c.homeX=c.x;c.homeY=c.y;}if(!Number.isFinite(c.targetX)){c.targetX=c.x;c.targetY=c.y;}});
 function toast(s){const el=document.getElementById('toast');el.textContent=s;el.style.display='block';clearTimeout(toastTimer);toastTimer=setTimeout(()=>el.style.display='none',2200);}
@@ -99,60 +99,44 @@ function house(x,y,s=1,color='#c68b4e'){ctx.fillStyle='#80502e';ctx.fillRect(x-1
 function label(t,x,y,size=25){ctx.textAlign='center';ctx.lineWidth=5;ctx.strokeStyle='#193b35';ctx.fillStyle='#fff';ctx.font=`900 ${size}px system-ui`;ctx.strokeText(t,x,y);ctx.fillText(t,x,y);}
 function road(points,width=25){ctx.beginPath();points.forEach((p,i)=>i?ctx.lineTo(p[0],p[1]):ctx.moveTo(p[0],p[1]));ctx.lineCap='round';ctx.lineJoin='round';ctx.strokeStyle='#9d7950';ctx.lineWidth=width+8;ctx.stroke();ctx.strokeStyle='#dfbd83';ctx.lineWidth=width;ctx.stroke();}
 function drawMap(){
- ctx.fillStyle='#087ca5';ctx.fillRect(0,0,map.w,map.h);
- for(let i=0;i<120;i++){const x=(i*173)%map.w,y=(i*97)%map.h;ctx.strokeStyle='#66d7e477';ctx.lineWidth=3;ctx.beginPath();ctx.arc(x,y,8+(i%5)*3,.2,2.5);ctx.stroke();}
- // Crescent-like island, beach rim and varied coves
- ctx.beginPath();ctx.moveTo(185,710);ctx.bezierCurveTo(145,480,285,245,535,185);ctx.bezierCurveTo(760,100,1020,125,1190,205);ctx.bezierCurveTo(1430,180,1640,370,1640,620);ctx.bezierCurveTo(1690,840,1500,1085,1230,1110);ctx.bezierCurveTo(1010,1190,740,1135,550,1080);ctx.bezierCurveTo(310,1040,150,900,185,710);ctx.closePath();ctx.fillStyle='#eac27a';ctx.fill();
- ctx.beginPath();ctx.moveTo(210,700);ctx.bezierCurveTo(180,490,315,275,550,220);ctx.bezierCurveTo(770,145,1010,165,1185,245);ctx.bezierCurveTo(1410,215,1600,395,1605,625);ctx.bezierCurveTo(1640,825,1470,1045,1210,1070);ctx.bezierCurveTo(1000,1140,760,1090,570,1040);ctx.bezierCurveTo(345,1000,205,875,210,700);ctx.closePath();ctx.fillStyle='#78bd55';ctx.fill();
- ctx.strokeStyle='#f8e2ad';ctx.lineWidth=13;ctx.stroke();
- // Highlands and snow caps
- path([[750,360],[815,205],[930,135],[1045,205],[1150,345],[1080,425],[900,430]],'#658c52','#426c43',5);
- path([[815,210],[875,150],[930,135],[990,165],[950,215],[900,205]],'#e5eee2');
- path([[975,205],[1030,180],[1085,235],[1050,270],[1010,245]],'#dce9e2');
- // mountain ridges
- path([[790,330],[870,235],[940,270],[1010,220],[1115,350],[1050,405],[900,390]],'#789b5c');
- // Jungle canopy mass
- for(let i=0;i<trees.length;i++){const t=trees[i];tree(t.x,t.y,t.s);}
- // River from mountain lake to southern/eastern coast
- ctx.beginPath();ctx.moveTo(1000,300);ctx.bezierCurveTo(1080,390,970,465,1035,545);ctx.bezierCurveTo(1100,630,1000,700,1090,780);ctx.bezierCurveTo(1160,855,1080,960,1160,1090);ctx.lineCap='round';ctx.strokeStyle='#176d83';ctx.lineWidth=65;ctx.stroke();ctx.strokeStyle='#36bfd0';ctx.lineWidth=48;ctx.stroke();
- ellipse(1000,300,88,47,'#29b9cb');ellipse(1000,300,62,31,'#62d9df');
- // waterfalls
- ctx.fillStyle='#d4f4ee';ctx.fillRect(1010,350,28,88);ctx.fillStyle='#43c7d3';ctx.fillRect(1017,355,14,82);
- // road network
- road([[360,470],[500,570],[680,680],[820,790],[1030,850],[1260,850],[1450,760]],28);
- road([[820,790],[790,620],[770,500],[850,390],[950,330]],22);
- road([[1030,850],[1130,700],[1280,590],[1410,470]],22);
- road([[820,790],[700,900],[560,965],[430,920]],20);
- road([[1030,850],[1120,980],[1260,1030],[1400,1010]],20);
- // Lighthouse offshore rock and beacon
- ellipse(235,350,72,55,'#7e7867');ellipse(235,350,58,42,'#b9a98a');
- ctx.fillStyle='#eee6d2';ctx.fillRect(220,245,30,105);ctx.fillStyle='#c64c3b';ctx.fillRect(220,270,30,19);ctx.fillRect(220,310,30,18);ctx.fillRect(215,238,40,13);ctx.fillStyle='#a9322c';ctx.fillRect(216,228,38,12);ellipse(235,224,18,8,'#e85b45');
- // western fishing cove, piers and boats
- ellipse(390,900,115,70,'#24bfd0');ellipse(390,900,82,45,'#55d9df');
- ctx.fillStyle='#80512e';ctx.fillRect(300,900,150,12);for(let i=0;i<7;i++)ctx.fillRect(310+i*21,891,5,30);
- for(let i=0;i<4;i++){ctx.save();ctx.translate(330+i*38,940+(i%2)*18);ctx.rotate(-.2);path([[-18,0],[-9,-8],[17,-5],[22,0],[10,8],[-13,7]],i%2?'#f4e3bd':'#b7d9e4','#614d38',2);ctx.restore();}
- // Village huts, market and campfire
- house(720,855,1.05,'#b98249');house(825,890,.95,'#d2a15a');house(900,820,.9,'#a96e3e');house(690,970,.9,'#c99558');house(940,970,1,'#bd884d');
- ellipse(830,945,13,8,'#e9a43a');ellipse(830,938,6,11,'#ffdf76');
- // Ancient ruins / stepped temple to the east
- path([[1330,390],[1445,390],[1500,485],[1385,485]],'#a69a7d','#716b59',3);
- ctx.fillStyle='#b9ad8e';ctx.fillRect(1350,345,105,48);ctx.fillRect(1365,315,75,30);ctx.fillRect(1380,285,45,30);
- for(let i=0;i<5;i++){ctx.fillStyle=i%2?'#8f876f':'#c2b493';ctx.fillRect(1325+i*31,470-i*8,28,12);}
- // Industrial harbor, hangars, containers and cranes
- ctx.fillStyle='#77796e';ctx.fillRect(1320,790,255,155);
- ctx.fillStyle='#9d9b89';ctx.beginPath();ctx.moveTo(1325,790);ctx.quadraticCurveTo(1445,665,1565,790);ctx.fill();
- ctx.fillStyle='#4f5a5b';ctx.fillRect(1350,805,190,92);
- for(let i=0;i<6;i++){ctx.fillStyle=['#c45c43','#477c68','#d19b45'][i%3];ctx.fillRect(1235+(i%3)*52,905+Math.floor(i/3)*38,45,32);}
- ctx.strokeStyle='#4b514b';ctx.lineWidth=9;ctx.beginPath();ctx.moveTo(1580,720);ctx.lineTo(1580,880);ctx.moveTo(1540,720);ctx.lineTo(1620,720);ctx.lineTo(1595,755);ctx.stroke();
- // Airstrip and hangars in south-east
- ctx.save();ctx.translate(1120,1015);ctx.rotate(-.08);ctx.fillStyle='#555d60';ctx.fillRect(-120,-22,260,45);ctx.strokeStyle='#e7e1c9';ctx.lineWidth=3;ctx.setLineDash([18,13]);ctx.beginPath();ctx.moveTo(-110,0);ctx.lineTo(130,0);ctx.stroke();ctx.setLineDash([]);ctx.restore();
- ctx.fillStyle='#9d8d70';ctx.fillRect(1000,940,55,38);ctx.fillRect(1065,940,55,38);
- // scattered palms around beaches
- for(let i=0;i<22;i++){const x=treeRnd(280,1550),y=treeRnd(760,1060);if((x<580||x>1250)&&y>790)tree(x,y,.75);}
- // Area names
- label('SKY PEAK',955,185,27);label('EMERALD JUNGLE',690,535,27);label('ANCIENT RUINS',1400,270,25);
- label("FISHERMAN'S COVE",390,815,22);label('VILLAGE',820,770,26);label('HARBOR CITY',1450,990,23);label('AIRSTRIP',1115,1090,21);
- label('LIGHTHOUSE',235,190,18);
+ ctx.fillStyle='#075b86';ctx.fillRect(0,0,map.w,map.h);
+ for(let i=0;i<145;i++){const x=(i*173)%map.w,y=(i*97)%map.h;ctx.strokeStyle='#75d7e477';ctx.lineWidth=3;ctx.beginPath();ctx.arc(x,y,8+(i%5)*3,.2,2.5);ctx.stroke();}
+ // A broad new continent with fjords and a warm southern coast
+ ctx.beginPath();ctx.moveTo(270,700);ctx.bezierCurveTo(170,520,300,270,520,210);ctx.bezierCurveTo(650,100,850,125,980,190);ctx.bezierCurveTo(1110,100,1390,190,1510,370);ctx.bezierCurveTo(1690,510,1620,760,1530,900);ctx.bezierCurveTo(1430,1100,1160,1140,980,1080);ctx.bezierCurveTo(790,1190,510,1080,390,980);ctx.bezierCurveTo(230,900,170,790,270,700);ctx.closePath();ctx.fillStyle='#dcb878';ctx.fill();
+ ctx.beginPath();ctx.moveTo(295,690);ctx.bezierCurveTo(210,520,330,300,540,245);ctx.bezierCurveTo(680,145,850,165,985,225);ctx.bezierCurveTo(1120,145,1360,225,1480,390);ctx.bezierCurveTo(1630,535,1580,750,1490,875);ctx.bezierCurveTo(1390,1050,1160,1090,985,1035);ctx.bezierCurveTo(800,1130,540,1040,420,950);ctx.bezierCurveTo(280,870,220,785,295,690);ctx.closePath();ctx.fillStyle='#78b957';ctx.fill();ctx.strokeStyle='#f8e4b6';ctx.lineWidth=14;ctx.stroke();
+ // Northern ice mountains
+ path([[650,390],[690,250],[790,145],[900,210],[980,130],[1110,270],[1160,405],[1030,470],[820,455]],'#879f9a','#526d69',5);
+ path([[690,260],[790,145],[845,235],[805,225],[770,280]],'#eef5ee');path([[900,210],[980,130],[1050,235],[1010,220],[970,275]],'#f5f6e9');path([[1020,300],[1090,245],[1160,405],[1090,380]],'#e7f0e8');
+ // Golden desert in the east
+ ellipse(1350,620,190,155,'#d8b45f');ellipse(1370,610,130,105,'#e7c979');
+ for(let i=0;i<18;i++){const x=treeRnd(1220,1510),y=treeRnd(500,760);ctx.strokeStyle='#9c7439';ctx.lineWidth=5;ctx.beginPath();ctx.moveTo(x,y+18);ctx.lineTo(x,y-8);ctx.stroke();ellipse(x-7,y-7,9,5,'#557d42');ellipse(x+7,y-10,10,5,'#648b49');}
+ // Fixed forests
+ for(const t of trees)tree(t.x,t.y,t.s);
+ // Central blue lake and river to the coast
+ ellipse(870,650,145,92,'#258fa8');ellipse(870,650,112,66,'#45bfd0');
+ ctx.beginPath();ctx.moveTo(930,690);ctx.bezierCurveTo(1050,740,1010,830,1130,870);ctx.bezierCurveTo(1230,920,1250,1000,1370,1050);ctx.lineCap='round';ctx.strokeStyle='#176d83';ctx.lineWidth=60;ctx.stroke();ctx.strokeStyle='#39b9cb';ctx.lineWidth=43;ctx.stroke();
+ // Roads linking the settlements
+ road([[450,780],[610,760],[760,820],[900,820],[1050,760],[1210,700],[1390,650]],26);
+ road([[900,820],[850,690],[820,550],[900,440],[980,350]],22);
+ road([[900,820],[980,930],[1130,980],[1320,960]],20);
+ road([[760,820],[650,930],[500,950],[390,870]],20);
+ // Western lighthouse and small harbor
+ ellipse(330,430,72,55,'#7c786b');ctx.fillStyle='#eee6d2';ctx.fillRect(315,325,30,105);ctx.fillStyle='#c64c3b';ctx.fillRect(315,350,30,19);ctx.fillRect(315,390,30,18);ctx.fillRect(310,318,40,13);ellipse(330,310,18,8,'#ed634e');
+ ellipse(420,930,110,68,'#24bfd0');ellipse(420,930,78,43,'#55d9df');ctx.fillStyle='#80512e';ctx.fillRect(335,925,145,12);for(let i=0;i<7;i++)ctx.fillRect(345+i*20,916,5,30);
+ for(let i=0;i<4;i++){ctx.save();ctx.translate(365+i*38,970+(i%2)*15);ctx.rotate(-.2);path([[-18,0],[-9,-8],[17,-5],[22,0],[10,8],[-13,7]],i%2?'#f4e3bd':'#b7d9e4','#614d38',2);ctx.restore();}
+ // Northern observatory
+ ctx.fillStyle='#687d8b';ctx.fillRect(1010,300,110,58);ctx.fillStyle='#d8e3e5';ctx.beginPath();ctx.arc(1065,300,55,Math.PI,0);ctx.fill();ctx.fillStyle='#38515f';ctx.fillRect(1057,265,16,35);
+ // Central town
+ house(760,865,1.05,'#b98249');house(860,900,.95,'#d2a15a');house(940,850,.9,'#a96e3e');house(720,970,.9,'#c99558');house(965,970,1,'#bd884d');
+ ellipse(850,950,13,8,'#e9a43a');ellipse(850,943,6,11,'#ffdf76');
+ // Eastern desert temple
+ path([[1320,510],[1435,510],[1490,605],[1375,605]],'#a69a7d','#716b59',3);ctx.fillStyle='#b9ad8e';ctx.fillRect(1340,465,105,48);ctx.fillRect(1355,435,75,30);ctx.fillRect(1370,405,45,30);for(let i=0;i<5;i++){ctx.fillStyle=i%2?'#8f876f':'#c2b493';ctx.fillRect(1315+i*31,590-i*8,28,12);}
+ // Southern research and shipyard district
+ ctx.fillStyle='#737d80';ctx.fillRect(1130,900,255,145);ctx.fillStyle='#a3a79c';ctx.beginPath();ctx.moveTo(1135,900);ctx.quadraticCurveTo(1255,790,1375,900);ctx.fill();ctx.fillStyle='#4f5a5b';ctx.fillRect(1160,915,190,82);
+ for(let i=0;i<6;i++){ctx.fillStyle=['#c45c43','#477c68','#d19b45'][i%3];ctx.fillRect(1045+(i%3)*52,1020+Math.floor(i/3)*35,45,30);}
+ // Snowy pine accents
+ for(let i=0;i<16;i++){const x=treeRnd(650,1130),y=treeRnd(230,420);ellipse(x,y+10,12,5,'#6c705e');ellipse(x,y,13,20,'#315f55');path([[x-12,y-3],[x,y-26],[x+12,y-3]],'#dbe8df');}
+ label('FROSTFALL PEAKS',900,190,25);label('WHISPERING WOODS',700,560,25);label('MIRROR LAKE',870,650,19);label('SUNSCORCH DESERT',1370,445,23);label('NOVA TOWN',850,790,26);label('WESTERN COVE',420,850,20);label('RESEARCH PORT',1255,1080,21);label('OLD TEMPLE',1400,385,18);label('LIGHTHOUSE',330,285,18);
 }
 function drawPerson(x,y,labelText,color,isPlayer=false){ellipse(x,y+8,12,5,'#24422c88');ctx.fillStyle=color;ctx.beginPath();ctx.arc(x,y-7,8,0,Math.PI*2);ctx.fill();ctx.fillStyle='#f1c49a';ctx.beginPath();ctx.arc(x,y-18,6,0,Math.PI*2);ctx.fill();ctx.strokeStyle='#3b2b22';ctx.lineWidth=2;ctx.stroke();ctx.textAlign='center';ctx.font='bold 12px system-ui';ctx.lineWidth=3;ctx.strokeStyle='#183b2d';ctx.strokeText(labelText,x,y-31);ctx.fillStyle='white';ctx.fillText(labelText,x,y-31);if(isPlayer){ctx.strokeStyle='#fff';ctx.lineWidth=2;ctx.beginPath();ctx.arc(x,y-8,15,0,Math.PI*2);ctx.stroke();}}
 function screenToWorld(x,y){return{x:(x-W/2)/cam.zoom+cam.x,y:(y-H/2)/cam.zoom+cam.y};}
@@ -166,7 +150,7 @@ function draw(){
 function drawMini(){
  mx.clearRect(0,0,260,200);mx.fillStyle='#087ca5';mx.fillRect(0,0,260,200);
  mx.save();mx.translate(130,100);mx.scale(.125,.125);mx.translate(-900,-625);
- mx.beginPath();mx.moveTo(185,710);mx.bezierCurveTo(145,480,285,245,535,185);mx.bezierCurveTo(760,100,1020,125,1190,205);mx.bezierCurveTo(1430,180,1640,370,1640,620);mx.bezierCurveTo(1690,840,1500,1085,1230,1110);mx.bezierCurveTo(1010,1190,740,1135,550,1080);mx.bezierCurveTo(310,1040,150,900,185,710);mx.fillStyle='#78bd55';mx.fill();mx.strokeStyle='#f2d69b';mx.lineWidth=45;mx.stroke();
+ mx.beginPath();mx.moveTo(270,700);mx.bezierCurveTo(170,520,300,270,520,210);mx.bezierCurveTo(650,100,850,125,980,190);mx.bezierCurveTo(1110,100,1390,190,1510,370);mx.bezierCurveTo(1690,510,1620,760,1530,900);mx.bezierCurveTo(1430,1100,1160,1140,980,1080);mx.bezierCurveTo(790,1190,510,1080,390,980);mx.bezierCurveTo(230,900,170,790,270,700);mx.fillStyle='#78bd55';mx.fill();mx.strokeStyle='#f2d69b';mx.lineWidth=45;mx.stroke();
  mx.fillStyle='#fff';citizens.forEach(c=>mx.fillRect(c.x-8,c.y-8,16,16));mx.fillStyle='#e34b39';mx.fillRect(player.x-13,player.y-13,26,26);mx.restore();
 }
 function nearest(){let b=null,d=Infinity;for(const c of citizens){const n=Math.hypot(c.x-player.x,c.y-player.y);if(n<d){d=n;b=c;}}return d<90?b:null;}
@@ -206,7 +190,7 @@ function update(dt){
 }
 function loop(now){const dt=Math.min((now-lastT)/1000,.05);lastT=now;update(dt);draw();requestAnimationFrame(loop);}
 resize();requestAnimationFrame(loop);
-addEventListener('pagehide',()=>{try{localStorage.setItem('earthverse_massive_island_v2',JSON.stringify({day,minute,citizens,player}));}catch(e){}});
+addEventListener('pagehide',()=>{try{localStorage.setItem('earthverse_terra_nova_v1',JSON.stringify({day,minute,citizens,player}));}catch(e){}});
 })();
 </script>
 </body>
