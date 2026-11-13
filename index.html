@@ -91,8 +91,17 @@ const names=['Asha','Mira','Arun','Dev','Nila','Kavin','Ira','Ravi','Tara','Noah
 const jobs=['Farmer','Shopkeeper','Fisher','Builder','Teacher','Medic','Guard','Cook','Carpenter','Guide'];
 const traits=['Friendly','Curious','Quiet','Ambitious','Helpful'];
 const citizens=names.map((name,i)=>({id:i+1,name,age:18+(i*7)%48,job:jobs[i%jobs.length],trait:traits[i%traits.length],money:250+(i*73)%900,hunger:20+(i*11)%45,energy:70+(i*3)%30,happy:60+(i*5)%35,activity:'working',x:0,y:0,homeX:0,homeY:0,goal:'Live a good day',memories:[],friends:[]}));
-function islandPoint(i){const a=i*2.39996+Math.random()*.3,r=Math.sqrt(Math.random())*.72;return{x:750+Math.cos(a)*r*590,y:525+Math.sin(a)*r*395};}
-citizens.forEach((c,i)=>{const p=islandPoint(i);c.x=c.homeX=p.x;c.y=c.homeY=p.y;});
+// Stable citizen homes: the same citizens keep the same home positions after reload.
+function citizenRandom(seed){let s=seed>>>0;return()=>{s=(s*1664525+1013904223)>>>0;return s/4294967296;};}
+const citizenRand=citizenRandom(20261114);
+function islandPoint(i){
+ const a=i*2.39996, r=.18+citizenRand()*.52;
+ return {x:750+Math.cos(a)*r*520,y:525+Math.sin(a)*r*350};
+}
+citizens.forEach((c,i)=>{
+ const p=islandPoint(i);c.x=c.homeX=p.x;c.y=c.homeY=p.y;
+ c.targetX=p.x;c.targetY=p.y;c.nextDecision=0;c.walking=false;
+});
 const player={x:750,y:710,speed:190};
 let keys={},stick={x:0,y:0},stickId=null,drag=null,lastT=performance.now();
 function hour(){return Math.floor(minute/60);}
@@ -102,6 +111,11 @@ const goals={sleeping:'Rest and recover',commuting:'Travel to work',working:'Ear
 function save(){const data={day,minute,citizens:citizens.map(({x,y,homeX,homeY,...c})=>({...c,x,y,homeX,homeY})),player};try{localStorage.setItem('earthverse_island_v1',JSON.stringify(data));toast('World saved on this device.');}catch(e){toast('Save unavailable in this browser.');}}
 function load(){try{const d=JSON.parse(localStorage.getItem('earthverse_island_v1')||'null');if(!d)return;day=d.day||1;minute=d.minute||480;if(d.player)Object.assign(player,d.player);if(Array.isArray(d.citizens))d.citizens.forEach(s=>{const c=citizens[s.id-1];if(c)Object.assign(c,s);});}catch(e){}}
 load();
+citizens.forEach(c=>{
+ if(!Number.isFinite(c.homeX)||!Number.isFinite(c.homeY)){c.homeX=c.x;c.homeY=c.y;}
+ if(!Number.isFinite(c.targetX)||!Number.isFinite(c.targetY)){c.targetX=c.x;c.targetY=c.y;}
+ c.nextDecision=0;c.walking=false;
+});
 function toast(s){const el=document.getElementById('toast');el.textContent=s;el.style.display='block';clearTimeout(toastTimer);toastTimer=setTimeout(()=>el.style.display='none',2200);}
 function path(points,fill,stroke=null,lw=2){ctx.beginPath();points.forEach((p,i)=>i?ctx.lineTo(p[0],p[1]):ctx.moveTo(p[0],p[1]));ctx.closePath();ctx.fillStyle=fill;ctx.fill();if(stroke){ctx.strokeStyle=stroke;ctx.lineWidth=lw;ctx.stroke();}}
 function ellipse(x,y,rx,ry,color){ctx.beginPath();ctx.ellipse(x,y,rx,ry,0,0,Math.PI*2);ctx.fillStyle=color;ctx.fill();}
@@ -118,7 +132,7 @@ function drawMap(){
  // central hill
  path([[490,290],[590,175],[735,120],[865,160],[980,270],[900,355],[680,365]],'#62ad43','#438c38',5);
  path([[610,215],[690,142],[780,130],[855,185],[790,242],[680,250]],'#8bce58');
- // Fixed jungle trees
+ // Fixed trees: positions and scales never change between frames.
  for(const t of trees)tree(t.x,t.y,t.s);
  // paths
  ctx.lineCap='round';ctx.lineJoin='round';ctx.strokeStyle='#d6ad69';ctx.lineWidth=31;ctx.beginPath();ctx.moveTo(420,405);ctx.bezierCurveTo(510,480,580,480,700,555);ctx.bezierCurveTo(790,620,880,625,1050,750);ctx.stroke();
@@ -136,8 +150,7 @@ function drawMap(){
  for(let i=0;i<4;i++)ctx.fillRect(1070+i*20,310,7,13);
  // village houses
  house(770,635,1.05);house(865,655,.95,'#d0a15a');house(920,735,1.1);house(780,755,.9);house(680,665,.85);
- // Fixed scattered trees
- for(const t of trees.slice(0)){} // trees are drawn from the fixed list above
+ // Scattered trees are included in the same fixed trees list above.
  // labels
  ctx.textAlign='center';ctx.lineWidth=5;ctx.strokeStyle='#254a29';ctx.fillStyle='#fff';ctx.font='bold 26px system-ui';
  [['THE JUNGLE',650,315],['RUINS',1115,410],['VILLAGE',835,590],['COVE',440,625]].forEach(([t,x,y])=>{ctx.strokeText(t,x,y);ctx.fillText(t,x,y);});
@@ -175,13 +188,55 @@ canvas.addEventListener('pointerdown',e=>{const p=screenToWorld(e.clientX,e.clie
 canvas.addEventListener('pointermove',e=>{if(!drag||drag.id!==e.pointerId)return;cam.x=clamp(drag.camX-(e.clientX-drag.x)/cam.zoom,0,map.w);cam.y=clamp(drag.camY-(e.clientY-drag.y)/cam.zoom,0,map.h);draw();});
 canvas.addEventListener('pointerup',e=>{if(drag&&drag.id===e.pointerId)drag=null;});
 canvas.addEventListener('pointercancel',()=>drag=null);
-function update(dt){elapsed+=dt;minute+=dt*3;if(minute>=1440){minute-=1440;day++;}const h=hour();
-const vx=(keys.ArrowRight||keys.KeyD?1:0)-(keys.ArrowLeft||keys.KeyA?1:0)+stick.x;
-const vy=(keys.ArrowDown||keys.KeyS?1:0)-(keys.ArrowUp||keys.KeyW?1:0)+stick.y;
-const len=Math.hypot(vx,vy)||1;player.x=clamp(player.x+vx/len*player.speed*dt,150,1350);player.y=clamp(player.y+vy/len*player.speed*dt,130,920);
-citizens.forEach((c,i)=>{schedule(c);const a=elapsed*.12+i*2.399;let tx=c.homeX+Math.cos(a)*30,ty=c.homeY+Math.sin(a)*24;if(c.activity==='commuting'||c.activity==='working'){tx=770+(i%7)*24;ty=630+(i%5)*17;}if(c.activity==='socializing'){tx=820+(i%6)*20;ty=700+(i%4)*18;}const dx=tx-c.x,dy=ty-c.y,d=Math.hypot(dx,dy)||1,step=Math.min(d,dt*(c.activity==='sleeping'?0:17));c.x+=dx/d*step;c.y+=dy/d*step;c.hunger=clamp(c.hunger+dt*.18,0,100);c.energy=clamp(c.energy+(c.activity==='sleeping'?dt*2.5:-dt*.45),0,100);c.happy=clamp(c.happy+(c.activity==='socializing'?dt*.35:-dt*.025),0,100);if(c.activity==='working')c.money+=dt*.3;});
-cam.x+=(player.x-cam.x)*Math.min(1,dt*1.6);cam.y+=(player.y-cam.y)*Math.min(1,dt*1.6);
-status.textContent=`EARTHVERSE · Day ${day} · ${String(h).padStart(2,'0')}:${String(Math.floor(minute%60)).padStart(2,'0')} · ${citizens.length} citizens`;
+function chooseCitizenDestination(c,i){
+ if(c.activity==='sleeping'){
+  c.targetX=c.homeX;c.targetY=c.homeY;
+ }else if(c.activity==='commuting'||c.activity==='working'){
+  const col=i%10,row=Math.floor(i/10);
+  c.targetX=600+col*48+(i%3)*5;
+  c.targetY=585+row*34+(i%4)*4;
+ }else if(c.activity==='socializing'){
+  const angle=i*2.39996;
+  c.targetX=820+Math.cos(angle)*(65+(i%4)*12);
+  c.targetY=700+Math.sin(angle)*(45+(i%3)*10);
+ }else if(c.activity==='eating'){
+  c.targetX=760+(i%8)*28;
+  c.targetY=755+(Math.floor(i/8)%4)*22;
+ }else{
+  const angle=i*1.7+elapsed*.03;
+  c.targetX=c.homeX+Math.cos(angle)*(18+(i%4)*5);
+  c.targetY=c.homeY+Math.sin(angle)*(14+(i%3)*5);
+ }
+ c.targetX=clamp(c.targetX,170,1330);
+ c.targetY=clamp(c.targetY,145,905);
+ c.nextDecision=elapsed+5+(i%5)*1.2;
+}
+function update(dt){
+ elapsed+=dt;
+ minute+=dt*3;
+ if(minute>=1440){minute-=1440;day++;}
+ const h=hour();
+ const vx=(keys.ArrowRight||keys.KeyD?1:0)-(keys.ArrowLeft||keys.KeyA?1:0)+stick.x;
+ const vy=(keys.ArrowDown||keys.KeyS?1:0)-(keys.ArrowUp||keys.KeyW?1:0)+stick.y;
+ const len=Math.hypot(vx,vy)||1;
+ player.x=clamp(player.x+vx/len*player.speed*dt,150,1350);
+ player.y=clamp(player.y+vy/len*player.speed*dt,130,920);
+ citizens.forEach((c,i)=>{
+  schedule(c);
+  if(elapsed>=c.nextDecision)chooseCitizenDestination(c,i);
+  const dx=c.targetX-c.x,dy=c.targetY-c.y,d=Math.hypot(dx,dy);
+  const speed=c.activity==='sleeping'?0:(c.activity==='commuting'?23:15);
+  const step=Math.min(d,speed*dt);
+  if(d>1){c.x+=dx/d*step;c.y+=dy/d*step;c.walking=speed>0;}
+  else{c.x=c.targetX;c.y=c.targetY;c.walking=false;}
+  c.hunger=clamp(c.hunger+dt*.18,0,100);
+  c.energy=clamp(c.energy+(c.activity==='sleeping'?dt*2.5:-dt*.45),0,100);
+  c.happy=clamp(c.happy+(c.activity==='socializing'?dt*.35:-dt*.025),0,100);
+  if(c.activity==='working')c.money+=dt*.3;
+ });
+ cam.x+=(player.x-cam.x)*Math.min(1,dt*1.6);
+ cam.y+=(player.y-cam.y)*Math.min(1,dt*1.6);
+ status.textContent=`EARTHVERSE · Day ${day} · ${String(h).padStart(2,'0')}:${String(Math.floor(minute%60)).padStart(2,'0')} · ${citizens.length} citizens`;
 }
 function loop(now){const dt=Math.min((now-lastT)/1000,.05);lastT=now;update(dt);draw();requestAnimationFrame(loop);}
 resize();requestAnimationFrame(loop);
