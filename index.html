@@ -33,6 +33,7 @@ button{border:1px solid #c5ecff88;background:#092b45eF;color:white;border-radius
 <div id="hud"><div class="pill" id="status">EARTHVERSE · Starting island…</div><div class="pill">2D ISLAND</div></div>
 <div id="buttons">
 <button id="save">SAVE WORLD</button>
+<button id="aiStatus">AI BRAIN: CONNECTING</button>
 <button id="talk">NEAREST CITIZEN</button>
 <button id="zoomIn">ZOOM +</button>
 <button id="zoomOut">ZOOM −</button>
@@ -57,71 +58,26 @@ cam.zoom=Math.max(.42,Math.min(.9,cam.zoom));
 const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
 const rnd=(a,b)=>a+Math.random()*(b-a);
 const pick=a=>a[Math.floor(Math.random()*a.length)];
-
-// Fixed, seeded scenery: generated once and reused on every frame.
-// This prevents trees from changing position/size and looking like they rotate.
-function seededRandom(seed){
- let s=seed>>>0;
- return function(){
-  s=(s*1664525+1013904223)>>>0;
-  return s/4294967296;
- };
-}
-const treeRandom=seededRandom(20261113);
-const treeRnd=(a,b)=>a+treeRandom()*(b-a);
-const trees=[];
-for(let i=0;i<115;i++){
- const x=treeRnd(390,930),y=treeRnd(210,465);
- if(((x-660)/300)**2+((y-330)/155)**2<1){
-  trees.push({x,y,s:treeRnd(.8,1.45)});
- }
-}
-for(let i=0;i<25;i++){
- let x,y,attempts=0;
- do{
-  x=treeRnd(180,1320);y=treeRnd(170,900);attempts++;
- }while(((x-750)/590)**2+((y-525)/390)**2>.78&&attempts<100);
- if((x<450&&y>600)||(x>1050&&y>600)){
-  trees.push({x,y,s:treeRnd(.65,1.05)});
- }
-}
-
 let day=1,minute=8*60,elapsed=0,selected=null,toastTimer=0;
+const AI_ENDPOINT='https://earthverse.skvigneshrahul.workers.dev/npc/think';
+let aiEnabled=true,aiBusy=false,aiCursor=0,lastAiAt=0;
+const aiStatus=document.getElementById('aiStatus');
+function setAIStatus(s){if(aiStatus)aiStatus.textContent='AI BRAIN: '+s;}
 const names=['Asha','Mira','Arun','Dev','Nila','Kavin','Ira','Ravi','Tara','Noah','Meena','Adhi','Sana','Vikram','Anu','Hari','Diya','Surya','Maya','Rohan','Priya','Ajay','Kavi','Naveen','Latha','Ishan','Keerthi','Manu','Riya','Bala','Sanjay','Divya','Gokul','Yazhini','Mohan','Aditi','Pranav','Sita','Vijay','Nithya','Rahul','Pooja','Arav','Janani','Dinesh','Kiran','Swetha','Varun','Anjali','Suresh'];
 const jobs=['Farmer','Shopkeeper','Fisher','Builder','Teacher','Medic','Guard','Cook','Carpenter','Guide'];
 const traits=['Friendly','Curious','Quiet','Ambitious','Helpful'];
-const citizens=names.map((name,i)=>({id:i+1,name,age:18+(i*7)%48,job:jobs[i%jobs.length],trait:traits[i%traits.length],money:250+(i*73)%900,hunger:20+(i*11)%45,energy:70+(i*3)%30,happy:60+(i*5)%35,activity:'thinking',x:0,y:0,homeX:0,homeY:0,goal:'Deciding what to do',memories:[],friends:[],personality:{curiosity:0.25+(i%5)*0.13,social:0.2+((i*3)%6)*0.12,ambition:0.25+((i*7)%5)*0.13},workX:0,workY:0,mood:'calm',decisionCount:0,brainTimer:0}));
-// Stable citizen homes: the same citizens keep the same home positions after reload.
-function citizenRandom(seed){let s=seed>>>0;return()=>{s=(s*1664525+1013904223)>>>0;return s/4294967296;};}
-const citizenRand=citizenRandom(20261114);
-function islandPoint(i){
- const a=i*2.39996, r=.18+citizenRand()*.52;
- return {x:750+Math.cos(a)*r*520,y:525+Math.sin(a)*r*350};
-}
-citizens.forEach((c,i)=>{
- const p=islandPoint(i);c.x=c.homeX=p.x;c.y=c.homeY=p.y;
- c.targetX=p.x;c.targetY=p.y;c.nextDecision=0;c.walking=false;
-});
+const citizens=names.map((name,i)=>({id:i+1,name,age:18+(i*7)%48,job:jobs[i%jobs.length],trait:traits[i%traits.length],money:250+(i*73)%900,hunger:20+(i*11)%45,energy:70+(i*3)%30,happy:60+(i*5)%35,activity:'working',x:0,y:0,homeX:0,homeY:0,goal:'Live a good day',memories:[],friends:[],aiThought:'',aiMood:'calm',aiSpeech:'',aiLastDecision:0}));
+function islandPoint(i){const a=i*2.39996+Math.random()*.3,r=Math.sqrt(Math.random())*.72;return{x:750+Math.cos(a)*r*590,y:525+Math.sin(a)*r*395};}
+citizens.forEach((c,i)=>{const p=islandPoint(i);c.x=c.homeX=p.x;c.y=c.homeY=p.y;});
 const player={x:750,y:710,speed:190};
 let keys={},stick={x:0,y:0},stickId=null,drag=null,lastT=performance.now();
 function hour(){return Math.floor(minute/60);}
-function schedule(c){
- const h=hour();
- if(h<6||h>=22)c.timePlan='sleeping';
- else if(h<8)c.timePlan='commuting';
- else if(h<12||h<16)c.timePlan='working';
- else if(h<17)c.timePlan='eating';
- else if(h<20)c.timePlan='socializing';
- else c.timePlan='relaxing';
-}
+function schedule(c){const h=hour();if(h<6||h>=22)c.activity='sleeping';else if(h<8)c.activity='commuting';else if(h<12||h<16)c.activity='working';else if(h<17)c.activity='eating';else if(h<20)c.activity='socializing';else c.activity='relaxing';
+if(c.hunger>85)c.activity='eating';if(c.energy<15)c.activity='sleeping';
+const goals={sleeping:'Rest and recover',commuting:'Travel to work',working:'Earn a living',eating:'Find food',socializing:'Meet neighbours',relaxing:'Enjoy island life'};c.goal=goals[c.activity];}
 function save(){const data={day,minute,citizens:citizens.map(({x,y,homeX,homeY,...c})=>({...c,x,y,homeX,homeY})),player};try{localStorage.setItem('earthverse_island_v1',JSON.stringify(data));toast('World saved on this device.');}catch(e){toast('Save unavailable in this browser.');}}
 function load(){try{const d=JSON.parse(localStorage.getItem('earthverse_island_v1')||'null');if(!d)return;day=d.day||1;minute=d.minute||480;if(d.player)Object.assign(player,d.player);if(Array.isArray(d.citizens))d.citizens.forEach(s=>{const c=citizens[s.id-1];if(c)Object.assign(c,s);});}catch(e){}}
 load();
-citizens.forEach(c=>{
- if(!Number.isFinite(c.homeX)||!Number.isFinite(c.homeY)){c.homeX=c.x;c.homeY=c.y;}
- if(!Number.isFinite(c.targetX)||!Number.isFinite(c.targetY)){c.targetX=c.x;c.targetY=c.y;}
- c.nextDecision=0;c.walking=false;
-});
 function toast(s){const el=document.getElementById('toast');el.textContent=s;el.style.display='block';clearTimeout(toastTimer);toastTimer=setTimeout(()=>el.style.display='none',2200);}
 function path(points,fill,stroke=null,lw=2){ctx.beginPath();points.forEach((p,i)=>i?ctx.lineTo(p[0],p[1]):ctx.moveTo(p[0],p[1]));ctx.closePath();ctx.fillStyle=fill;ctx.fill();if(stroke){ctx.strokeStyle=stroke;ctx.lineWidth=lw;ctx.stroke();}}
 function ellipse(x,y,rx,ry,color){ctx.beginPath();ctx.ellipse(x,y,rx,ry,0,0,Math.PI*2);ctx.fillStyle=color;ctx.fill();}
@@ -138,8 +94,8 @@ function drawMap(){
  // central hill
  path([[490,290],[590,175],[735,120],[865,160],[980,270],[900,355],[680,365]],'#62ad43','#438c38',5);
  path([[610,215],[690,142],[780,130],[855,185],[790,242],[680,250]],'#8bce58');
- // Fixed trees: positions and scales never change between frames.
- for(const t of trees)tree(t.x,t.y,t.s);
+ // jungle mass
+ for(let i=0;i<115;i++){const x=rnd(390,930),y=rnd(210,465);if(((x-660)/300)**2+((y-330)/155)**2<1)tree(x,y,rnd(.8,1.45));}
  // paths
  ctx.lineCap='round';ctx.lineJoin='round';ctx.strokeStyle='#d6ad69';ctx.lineWidth=31;ctx.beginPath();ctx.moveTo(420,405);ctx.bezierCurveTo(510,480,580,480,700,555);ctx.bezierCurveTo(790,620,880,625,1050,750);ctx.stroke();
  ctx.strokeStyle='#edcf91';ctx.lineWidth=22;ctx.stroke();
@@ -156,7 +112,8 @@ function drawMap(){
  for(let i=0;i<4;i++)ctx.fillRect(1070+i*20,310,7,13);
  // village houses
  house(770,635,1.05);house(865,655,.95,'#d0a15a');house(920,735,1.1);house(780,755,.9);house(680,665,.85);
- // Scattered trees are included in the same fixed trees list above.
+ // palms and scattered trees
+ for(let i=0;i<25;i++){let x,y;do{x=rnd(180,1320);y=rnd(170,900);}while(((x-750)/590)**2+((y-525)/390)**2>.78);if((x<450&&y>600)||(x>1050&&y>600))tree(x,y,rnd(.65,1.05));}
  // labels
  ctx.textAlign='center';ctx.lineWidth=5;ctx.strokeStyle='#254a29';ctx.fillStyle='#fff';ctx.font='bold 26px system-ui';
  [['THE JUNGLE',650,315],['RUINS',1115,410],['VILLAGE',835,590],['COVE',440,625]].forEach(([t,x,y])=>{ctx.strokeText(t,x,y);ctx.fillText(t,x,y);});
@@ -176,23 +133,49 @@ function draw(){
 function drawMini(){mx.clearRect(0,0,208,160);mx.fillStyle='#087ca5';mx.fillRect(0,0,208,160);mx.save();mx.translate(104,80);mx.scale(.13,.13);mx.translate(-750,-525);mx.beginPath();mx.ellipse(750,525,625,440,-.08,0,Math.PI*2);mx.fillStyle='#83c95a';mx.fill();mx.strokeStyle='#f2d69b';mx.lineWidth=35;mx.stroke();mx.fillStyle='#fff';citizens.forEach(c=>{mx.fillRect(c.x-8,c.y-8,16,16)});mx.fillStyle='#e34b39';mx.fillRect(player.x-12,player.y-12,24,24);mx.restore();}
 function nearest(){let b=null,d=Infinity;for(const c of citizens){const n=Math.hypot(c.x-player.x,c.y-player.y);if(n<d){d=n;b=c;}}return d<90?b:null;}
 function talk(c,msg){
- const m=msg.toLowerCase();let r;
- if(/hello|hi|hey|வணக்கம்/.test(m)){r=`Hello! I'm ${c.name}. I feel ${c.mood} today. What are you doing?`;c.happy=clamp(c.happy+2,0,100);}
- else if(/job|work/.test(m))r=`I work as a ${c.job}. Right now I'm ${c.activity}. My plan is to ${c.goal.toLowerCase()}.`;
- else if(/name/.test(m))r=`My name is ${c.name}. I'm ${c.trait.toLowerCase()} by nature.`;
- else if(/family|friend/.test(m))r=`I know ${c.friends.length} neighbour(s). I like meeting people around the island.`;
- else if(/hungry|food|eat/.test(m))r=c.hunger>55?'I am hungry. I should find something to eat.':'I am not very hungry right now.';
- else if(/tired|sleep|rest/.test(m))r=c.energy<45?'I am tired. I need to go home and rest.':'I have enough energy for now.';
- else if(/where|place/.test(m))r='I live on this island. I choose where to go based on what I need and what is happening around me.';
- else r=pick([`Interesting thought. I'll remember that.`,`I was planning to ${c.goal.toLowerCase()}.`,`I want to explore more of this island.`,`Let's meet again later.`]);
- c.memories.push({day,text:`You said: ${msg}`});if(c.memories.length>20)c.memories.shift();
- return r;
+ c.memories.push({day,text:`You said: ${msg}`});
+ if(c.memories.length>12)c.memories.shift();
+ return `${c.name} is thinking...`;
 }
-function openCitizen(c){selected=c;document.getElementById('person').textContent=`${c.name} · ${c.age} · ${c.job}`;document.getElementById('reply').textContent=`${c.trait} · ${c.activity} · ${c.goal} · Happiness ${Math.round(c.happy)}%`;document.getElementById('dialog').style.display='block';}
-document.getElementById('send').onclick=()=>{if(!selected)return;const input=document.getElementById('message'),msg=input.value.trim()||'hello';document.getElementById('reply').textContent=selected.name+': '+talk(selected,msg);input.value='';};
+async function askNpcBrain(c,userMessage=''){
+ if(aiBusy)return null;
+ aiBusy=true;setAIStatus('THINKING');
+ try{
+  const payload={
+   npc:{id:String(c.id),personality:`${c.trait} ${c.job}`,goal:c.goal,location:`Island (${Math.round(c.x)}, ${Math.round(c.y)})`,needs:{hunger:c.hunger,energy:c.energy,happiness:c.happy}},
+   world:{time:`Day ${day}, ${String(hour()).padStart(2,'0')}:${String(Math.floor(minute%60)).padStart(2,'0')}`,nearbyNpcs:citizens.filter(o=>o.id!==c.id&&Math.hypot(o.x-c.x,o.y-c.y)<150).slice(0,5).map(o=>`${o.name} (${o.job})`),recentEvents:userMessage?[`Player said: ${userMessage}`]:[]},
+   memory:c.memories.slice(-12).map(m=>typeof m==='string'?m:m.text||JSON.stringify(m))
+  };
+  const res=await fetch(AI_ENDPOINT,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+  const data=await res.json();
+  if(!res.ok)throw new Error(data.error||'AI request failed');
+  const d=data.decision;
+  c.aiThought=d.thought||'';c.aiMood=d.mood||'calm';c.aiSpeech=d.speech||'';
+  c.aiLastDecision=Date.now();
+  if(d.memoryUpdate){c.memories.push({day,text:d.memoryUpdate});if(c.memories.length>12)c.memories.shift();}
+  if(d.action==='eat')c.activity='eating';
+  else if(d.action==='sleep'||d.action==='rest')c.activity='sleeping';
+  else if(d.action==='work')c.activity='working';
+  else if(d.action==='talk'||d.action==='trade')c.activity='socializing';
+  else if(d.action==='explore'||d.action==='walk')c.activity='exploring';
+  c.goal=d.target?`${d.action}: ${d.target}`:d.action;
+  if(selected===c){
+   document.getElementById('reply').textContent=userMessage?`${c.name}: ${d.speech||d.thought}`:`${c.name}: ${d.thought}`;
+  }
+  setAIStatus('ONLINE');
+  return d;
+ }catch(err){
+  setAIStatus('ERROR');
+  toast('NPC AI: '+(err.message||'Connection failed'));
+  return null;
+ }finally{aiBusy=false;}
+}
+function openCitizen(c){selected=c;document.getElementById('person').textContent=`${c.name} · ${c.age} · ${c.job}`;document.getElementById('reply').textContent=`${c.trait} citizen · ${c.activity} · Happiness ${Math.round(c.happy)}%`;document.getElementById('dialog').style.display='block';}
+document.getElementById('send').onclick=()=>{if(!selected)return;const input=document.getElementById('message'),msg=input.value.trim()||'hello';const c=selected;document.getElementById('reply').textContent=talk(c,msg);input.value='';askNpcBrain(c,msg);};
 document.getElementById('close').onclick=()=>document.getElementById('dialog').style.display='none';
 document.getElementById('talk').onclick=()=>{const c=nearest();if(c)openCitizen(c);else toast('Move closer to a citizen first.');};
 document.getElementById('save').onclick=save;
+aiStatus.onclick=async()=>{if(!selected){toast('Tap a citizen first, then press AI BRAIN.');return;}await askNpcBrain(selected);};
 document.getElementById('zoomIn').onclick=()=>{cam.zoom=clamp(cam.zoom*1.15,.35,1.6);draw();};
 document.getElementById('zoomOut').onclick=()=>{cam.zoom=clamp(cam.zoom/1.15,.35,1.6);draw();};
 addEventListener('keydown',e=>keys[e.code]=true);addEventListener('keyup',e=>keys[e.code]=false);
@@ -206,93 +189,21 @@ canvas.addEventListener('pointerdown',e=>{const p=screenToWorld(e.clientX,e.clie
 canvas.addEventListener('pointermove',e=>{if(!drag||drag.id!==e.pointerId)return;cam.x=clamp(drag.camX-(e.clientX-drag.x)/cam.zoom,0,map.w);cam.y=clamp(drag.camY-(e.clientY-drag.y)/cam.zoom,0,map.h);draw();});
 canvas.addEventListener('pointerup',e=>{if(drag&&drag.id===e.pointerId)drag=null;});
 canvas.addEventListener('pointercancel',()=>drag=null);
-// Lightweight autonomous citizen brain: each NPC evaluates needs, personality,
-// time of day, nearby people, and its own random preference before choosing an action.
-// This is local simulation logic, not a connected cloud/LLM model.
-function citizenBrain(c,i,dt){
- c.brainTimer-=dt;
- if(c.brainTimer>0)return;
- c.brainTimer=2.5+(i%7)*0.55;
- c.decisionCount++;
- schedule(c);
-
- const nearby=citizens.filter(o=>o!==c&&Math.hypot(o.x-c.x,o.y-c.y)<105);
- const socialNeed=clamp((72-c.happy)/72,0,1)*c.personality.social;
- const hungerNeed=clamp((c.hunger-28)/65,0,1);
- const restNeed=clamp((58-c.energy)/58,0,1);
- const workNeed=clamp((c.money<180?0.85:0.28)*c.personality.ambition,0,1);
- const curiousNeed=c.personality.curiosity*(0.35+Math.random()*0.65);
- const options=[
-  {action:'sleeping',score:restNeed*1.35+(c.timePlan==='sleeping'?0.55:0)},
-  {action:'eating',score:hungerNeed*1.5+(c.timePlan==='eating'?0.35:0)},
-  {action:'socializing',score:socialNeed+Math.min(0.45,nearby.length*0.12)+(c.timePlan==='socializing'?0.3:0)},
-  {action:'working',score:workNeed+(c.timePlan==='working'?0.5:0)},
-  {action:'exploring',score:curiousNeed+(c.timePlan==='relaxing'?0.25:0)},
-  {action:'relaxing',score:0.22+(c.timePlan==='relaxing'?0.25:0)}
- ];
- // Night/rest and urgent needs take priority, but citizens retain individual choices.
- if(c.timePlan==='sleeping'&&restNeed<0.35)options.find(o=>o.action==='sleeping').score+=0.8;
- options.sort((a,b)=>b.score-a.score);
- const chosen=options[0].action;
- c.activity=chosen;
- c.mood=c.happy>75?'happy':c.happy<35?'sad':c.energy<25?'tired':'calm';
-
- let tx=c.x,ty=c.y;
- if(chosen==='sleeping'){tx=c.homeX;ty=c.homeY;c.goal='Go home and sleep';}
- else if(chosen==='working'){tx=c.workX+(i%3-1)*18;ty=c.workY+(i%4-1)*13;c.goal='Work and earn money';}
- else if(chosen==='eating'){tx=760+(i%8)*24+rnd(-10,10);ty=750+Math.floor(i/8)*19+rnd(-8,8);c.goal='Find food and eat';}
- else if(chosen==='socializing'){
-   const friend=nearby.length?nearby[Math.floor(Math.random()*nearby.length)]:null;
-   if(friend){tx=friend.x+rnd(-22,22);ty=friend.y+rnd(-22,22);if(!c.friends.includes(friend.id))c.friends.push(friend.id);}
-   else{const a=Math.random()*Math.PI*2;tx=850+Math.cos(a)*rnd(20,95);ty=700+Math.sin(a)*rnd(15,65);}
-   c.goal='Meet people and make friends';
- }else if(chosen==='exploring'){
-   const a=Math.random()*Math.PI*2,r=rnd(45,170);tx=750+Math.cos(a)*r;ty=525+Math.sin(a)*r*.65;c.goal='Explore the island';
- }else{
-   const a=Math.random()*Math.PI*2;tx=c.homeX+Math.cos(a)*rnd(15,85);ty=c.homeY+Math.sin(a)*rnd(12,65);c.goal='Relax near home';
- }
- c.targetX=clamp(tx,170,1330);c.targetY=clamp(ty,145,905);
- c.nextDecision=elapsed+c.brainTimer;
+async function autonomousBrainTick(){
+ if(!aiEnabled||aiBusy||Date.now()-lastAiAt<18000)return;
+ lastAiAt=Date.now();
+ const c=citizens[aiCursor%citizens.length];aiCursor++;
+ await askNpcBrain(c);
 }
-
-// Soft separation prevents citizens from occupying exactly the same point.
-function avoidCrowding(c,dt){
- let ax=0,ay=0,count=0;
- for(const o of citizens){
-  if(o===c)continue;
-  const dx=c.x-o.x,dy=c.y-o.y,d=Math.hypot(dx,dy);
-  if(d>0&&d<23){ax+=dx/d*(23-d);ay+=dy/d*(23-d);count++;}
- }
- if(count){c.x+=ax/count*Math.min(1,dt*2.2);c.y+=ay/count*Math.min(1,dt*2.2);}
+function update(dt){elapsed+=dt;minute+=dt*3;if(minute>=1440){minute-=1440;day++;}const h=hour();
+const vx=(keys.ArrowRight||keys.KeyD?1:0)-(keys.ArrowLeft||keys.KeyA?1:0)+stick.x;
+const vy=(keys.ArrowDown||keys.KeyS?1:0)-(keys.ArrowUp||keys.KeyW?1:0)+stick.y;
+const len=Math.hypot(vx,vy)||1;player.x=clamp(player.x+vx/len*player.speed*dt,150,1350);player.y=clamp(player.y+vy/len*player.speed*dt,130,920);
+citizens.forEach((c,i)=>{schedule(c);const a=elapsed*.12+i*2.399;let tx=c.homeX+Math.cos(a)*30,ty=c.homeY+Math.sin(a)*24;if(c.activity==='commuting'||c.activity==='working'){tx=770+(i%7)*24;ty=630+(i%5)*17;}if(c.activity==='socializing'){tx=820+(i%6)*20;ty=700+(i%4)*18;}if(c.activity==='exploring'){tx=560+Math.cos(elapsed*.15+i)*230;ty=430+Math.sin(elapsed*.15+i)*170;}const dx=tx-c.x,dy=ty-c.y,d=Math.hypot(dx,dy)||1,step=Math.min(d,dt*(c.activity==='sleeping'?0:17));c.x+=dx/d*step;c.y+=dy/d*step;c.hunger=clamp(c.hunger+dt*.18,0,100);c.energy=clamp(c.energy+(c.activity==='sleeping'?dt*2.5:-dt*.45),0,100);c.happy=clamp(c.happy+(c.activity==='socializing'?dt*.35:-dt*.025),0,100);if(c.activity==='working')c.money+=dt*.3;});
+cam.x+=(player.x-cam.x)*Math.min(1,dt*1.6);cam.y+=(player.y-cam.y)*Math.min(1,dt*1.6);
+status.textContent=`EARTHVERSE · Day ${day} · ${String(h).padStart(2,'0')}:${String(Math.floor(minute%60)).padStart(2,'0')} · ${citizens.length} citizens`;
 }
-function update(dt){
- elapsed+=dt;
- minute+=dt*3;
- if(minute>=1440){minute-=1440;day++;}
- const h=hour();
- const vx=(keys.ArrowRight||keys.KeyD?1:0)-(keys.ArrowLeft||keys.KeyA?1:0)+stick.x;
- const vy=(keys.ArrowDown||keys.KeyS?1:0)-(keys.ArrowUp||keys.KeyW?1:0)+stick.y;
- const len=Math.hypot(vx,vy)||1;
- player.x=clamp(player.x+vx/len*player.speed*dt,150,1350);
- player.y=clamp(player.y+vy/len*player.speed*dt,130,920);
- citizens.forEach((c,i)=>{
-  citizenBrain(c,i,dt);
-  const dx=c.targetX-c.x,dy=c.targetY-c.y,d=Math.hypot(dx,dy);
-  const speed=c.activity==='sleeping'?0:(c.activity==='working'?19:c.activity==='exploring'?28:23);
-  const step=Math.min(d,speed*dt);
-  if(d>2){c.x+=dx/d*step;c.y+=dy/d*step;c.walking=speed>0;}
-  else{c.x=c.targetX;c.y=c.targetY;c.walking=false;}
-  avoidCrowding(c,dt);
-  c.hunger=clamp(c.hunger+dt*(c.activity==='eating'?-1.2:.16),0,100);
-  c.energy=clamp(c.energy+(c.activity==='sleeping'?dt*2.8:c.activity==='relaxing'?dt*.25:-dt*.32),0,100);
-  c.happy=clamp(c.happy+(c.activity==='socializing'?dt*.55:c.activity==='exploring'?dt*.12:-dt*.018),0,100);
-  if(c.activity==='working')c.money+=dt*.32;
- });
- cam.x+=(player.x-cam.x)*Math.min(1,dt*1.6);
- cam.y+=(player.y-cam.y)*Math.min(1,dt*1.6);
- status.textContent=`EARTHVERSE · Day ${day} · ${String(h).padStart(2,'0')}:${String(Math.floor(minute%60)).padStart(2,'0')} · ${citizens.length} citizens`;
-}
-function loop(now){const dt=Math.min((now-lastT)/1000,.05);lastT=now;update(dt);draw();requestAnimationFrame(loop);}
+function loop(now){const dt=Math.min((now-lastT)/1000,.05);lastT=now;update(dt);draw();if(elapsed>2)autonomousBrainTick();requestAnimationFrame(loop);}
 resize();requestAnimationFrame(loop);
 addEventListener('pagehide',()=>{try{localStorage.setItem('earthverse_island_v1',JSON.stringify({day,minute,citizens,player}));}catch(e){}});
 })();
